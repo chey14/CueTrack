@@ -5,13 +5,14 @@ const TABLE_SIZES = ['Regular', 'Medium', 'Large']
 const lbl = { fontSize: '0.82rem', color: 'var(--color-text2)', marginBottom: 5, display: 'block' }
 
 export default function Settings() {
-  const { settings, loading, saving, saveSettings, saveQrImage, uploadingQr } = useClubSettings()
+  const { settings, loading, saving, saveSettings, saveQrImage, uploadingQr, getClubViewUrl } = useClubSettings()
 
   const [clubName,  setClubName]  = useState('')
   const [whatsapp,  setWhatsapp]  = useState('')
   const [upiId,     setUpiId]     = useState('')
   const [tables,    setTables]    = useState([])
   const [saved,     setSaved]     = useState(false)
+  const [clubViewUrl, setClubViewUrl] = useState('')
   const fileInputRef = useRef(null)
 
   // When Firestore data loads, populate the form fields
@@ -21,6 +22,8 @@ export default function Settings() {
       setWhatsapp(settings.ownerWhatsapp || '')
       setUpiId(settings.upiId            || '')
       setTables(settings.tables          || [])
+      const url = getClubViewUrl()
+      if (url) setClubViewUrl(url)
     }
   }, [loading, settings])
 
@@ -167,7 +170,7 @@ export default function Settings() {
               </button>
               {qrImage && (
                 <p style={{ fontSize: '0.72rem', color: 'var(--color-green)', marginTop: 6 }}>
-                  ✓ QR saved — will be sent in WhatsApp bills
+                  ✓ QR saved — shown on screen during UPI checkout
                 </p>
               )}
             </div>
@@ -259,6 +262,48 @@ export default function Settings() {
           ))}
         </div>
       </SectionCard>
+
+      {/* ── Club View QR ──────────────────────────── */}
+      {clubViewUrl && (
+        <SectionCard title="Club QR code for customers">
+          <p style={{ fontSize: '0.82rem', color: 'var(--color-text2)', marginBottom: '1rem', lineHeight: 1.6 }}>
+            Print this QR code and place it at your reception or entrance.
+            When customers scan it, they see all your tables with live timers
+            and running costs — read only, no login needed.
+          </p>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start', flexWrap: 'wrap' }}>
+            {/* QR image generated via Google Charts API — free, no account */}
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(clubViewUrl)}`}
+              alt="Club QR code"
+              style={{ width: 150, height: 150, borderRadius: 10, border: '1px solid var(--color-border)', flexShrink: 0 }}
+            />
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontSize: '0.78rem', color: 'var(--color-text3)', marginBottom: '0.6rem', wordBreak: 'break-all', lineHeight: 1.5 }}>
+                {clubViewUrl}
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button type="button" className="btn-ghost"
+                  style={{ fontSize: '0.8rem', padding: '0.4rem 0.9rem' }}
+                  onClick={() => { navigator.clipboard.writeText(clubViewUrl); alert('Link copied!') }}>
+                  📋 Copy link
+                </button>
+                <a href={clubViewUrl} target="_blank" rel="noopener noreferrer"
+                  className="btn-ghost"
+                  style={{ fontSize: '0.8rem', padding: '0.4rem 0.9rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+                  👁 Preview
+                </a>
+                <a href={`https://api.qrserver.com/v1/create-qr-code/?size=500x500&data=${encodeURIComponent(clubViewUrl)}`}
+                  target="_blank" rel="noopener noreferrer" download="club-qr.png"
+                  className="btn-ghost"
+                  style={{ fontSize: '0.8rem', padding: '0.4rem 0.9rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+                  ⬇ Download QR
+                </a>
+              </div>
+            </div>
+          </div>
+        </SectionCard>
+      )}
 
       <button type="submit" className="btn-primary"
         style={{ width: '100%', justifyContent: 'center', opacity: (saving || uploadingQr) ? 0.7 : 1 }}

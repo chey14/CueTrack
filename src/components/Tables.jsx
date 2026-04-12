@@ -29,20 +29,7 @@ const SAVED_MENU = [
   { id: 7, name: 'Maggi',      price: 50,  category: 'Snacks' },
 ]
 
-// ── ImgBB upload ─────────────────────────────────────────────────
-// Free image hosting — get your key at imgbb.com/api (30 seconds, no card)
-const IMGBB_API_KEY = 'YOUR_IMGBB_API_KEY'
-
-async function uploadToImgBB(base64String) {
-  const base64Data = base64String.replace(/^data:image\/[a-z]+;base64,/, '')
-  const formData = new FormData()
-  formData.append('image', base64Data)
-  const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
-    method: 'POST', body: formData,
-  })
-  const data = await res.json()
-  return data?.data?.url || null
-}
+// QR upload handled by useClubSettings hook (Cloudinary)
 
 // ── Modal wrapper ────────────────────────────────────────────────
 function Modal({ children, onClose }) {
@@ -182,7 +169,7 @@ function CanteenModal({ table, onAdd, onClose }) {
 }
 
 // ── Bill modal ───────────────────────────────────────────────────
-function BillModal({ table, upiId, upiQrBase64, clubName, onClose, onConfirm }) {
+function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, onClose, onConfirm }) {
   const [paymentMode, setPaymentMode] = useState('cash')
   const [sending, setSending] = useState('')
 
@@ -191,13 +178,18 @@ function BillModal({ table, upiId, upiQrBase64, clubName, onClose, onConfirm }) 
   const total        = tableCharge + canteenTotal
   const ratePerHour  = (table.ratePerMin * 60).toFixed(0)
 
-  // ── WhatsApp message builder ────────────────────────────────────
-  // Keeping this clean, well-formatted, and under ~1500 chars encoded
-  function buildMessage(qrUrl) {
+  // ── WhatsApp message builder ─────────────────────────────────────
+  // QR strategy (no paid service needed):
+  //   1. If owner set up Cloudinary → use their uploaded UPI QR photo URL
+  //   2. Otherwise → generate a UPI deep-link QR on-the-fly using
+  //      api.qrserver.com (free, no account, no limits).
+  //      The generated QR encodes "upi://pay?pa=UPI_ID&am=AMOUNT&tn=CueTrack"
+  //      — when customer scans it, any UPI app (PhonePe/GPay/Paytm) opens
+  //      directly with the amount pre-filled. No manual entry needed.
+  function buildMessage() {
     const displayClub = clubName || 'CueTrack'
     const customerGreet = table.customer?.name ? `Hi *${table.customer.name}*! ` : ''
 
-    // Time display: show hours if >= 60 mins, else show mins + secs
     const h = Math.floor(table.elapsed / 3600)
     const m = Math.floor((table.elapsed % 3600) / 60)
     const s = table.elapsed % 60
@@ -229,50 +221,41 @@ function BillModal({ table, upiId, upiQrBase64, clubName, onClose, onConfirm }) 
       `💳 Payment: *${paymentMode === 'upi' ? 'UPI' : paymentMode === 'cash' ? 'Cash' : 'Pending'}*`,
     )
 
-    if (paymentMode === 'upi') {
-      lines.push(``)
-      if (upiId)  lines.push(`📲 *UPI ID:* ${upiId}`)
-      if (qrUrl)  lines.push(`📷 *Scan QR to pay:* ${qrUrl}`)
+    if (paymentMode === 'upi' && upiId) {
+      // UPI deep-link QR: encodes upi://pay?pa=ID&am=AMOUNT&tn=NOTE
+      // Customer scans → UPI app opens with everything pre-filled
+      const upiDeepLink = `upi://pay?pa=${upiId}&am=${total.toFixed(2)}&tn=CueTrack-${displayClub}&cu=INR`
+      // api.qrserver.com generates a clean scannable QR as a PNG link — completely free
+      const generatedQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(upiDeepLink)}`
+      // Use owner's uploaded QR photo if available, else use the generated one
+      const finalQrUrl = upiQrUrl || generatedQrUrl
+      lines.push(
+        ``,
+        `📲 *Pay via UPI:*`,
+        `UPI ID: ${upiId}`,
+        ``,
+        `📷 *Scan QR to pay ₹${total.toFixed(2)}:*`,
+        finalQrUrl,
+        `_(Tap the link → scan QR in PhonePe / GPay / Paytm)_`,
+      )
     }
 
     lines.push(``, `Thank you for playing! See you soon 🎱`)
     return encodeURIComponent(lines.join('\n'))
   }
 
-  // ── Auto-send workaround ────────────────────────────────────────
-  // WhatsApp Web doesn't allow auto-send via URL for security reasons.
-  // The closest we can do: open WA with text pre-filled, then
-  // programmatically focus the send button so the user just presses Enter.
-  // For truly automatic sending you need the WhatsApp Business API (paid).
-  // We show a clear "Press Enter to send" instruction so it's 1 keypress.
   async function sendWhatsApp() {
     let phone = (table.customer?.phone || '').replace(/\D/g, '')
     if (!phone) return
-    if (phone.length === 10) phone = '91' + phone  // add India country code
-
-    let qrUrl = null
-    if (paymentMode === 'upi' && upiQrBase64 && IMGBB_API_KEY !== 'YOUR_IMGBB_API_KEY') {
-      setSending('uploading')
-      try {
-        qrUrl = await uploadToImgBB(upiQrBase64)
-      } catch (e) {
-        console.warn('ImgBB upload failed, sending without QR link', e)
-      }
-    }
-
+    if (phone.length === 10) phone = '91' + phone
     setSending('opening')
-    const msg = buildMessage(qrUrl)
-    // api.whatsapp.com is more reliable than wa.me for pre-filled text
+    const msg = buildMessage()
     const url = `https://api.whatsapp.com/send?phone=${phone}&text=${msg}`
     window.open(url, '_blank', 'noopener,noreferrer')
     setSending('')
   }
 
-  const sendBtnLabel = {
-    '': '📲 Send Receipt',
-    'uploading': '⏳ Uploading QR...',
-    'opening': '📲 Opening WhatsApp...',
-  }[sending] || '📲 Send Receipt'
+  const sendBtnLabel = sending === 'opening' ? '📲 Opening WhatsApp...' : '📲 Send Receipt'
 
   return (
     <Modal onClose={onClose}>
@@ -325,23 +308,33 @@ function BillModal({ table, upiId, upiQrBase64, clubName, onClose, onConfirm }) 
           {/* UPI info box */}
           {paymentMode === 'upi' && (
             <div style={{ marginTop:'0.75rem',padding:'0.85rem',background:'rgba(59,130,246,0.06)',border:'1px solid rgba(59,130,246,0.2)',borderRadius:8 }}>
-              {upiId
-                ? <p style={{ fontSize:'0.82rem',color:'var(--color-blue)',marginBottom:upiQrBase64?'0.6rem':0 }}>📲 UPI ID: <strong>{upiId}</strong></p>
-                : <p style={{ fontSize:'0.78rem',color:'var(--color-amber)' }}>⚠ No UPI ID set. Add it in Settings.</p>
-              }
-              {upiQrBase64 && (
-                <div style={{ display:'flex',alignItems:'center',gap:'0.75rem' }}>
-                  <img src={upiQrBase64} alt="UPI QR"
-                    style={{ width:80,height:80,borderRadius:8,border:'1px solid var(--color-border)',objectFit:'cover',flexShrink:0 }} />
-                  <div>
-                    <p style={{ fontSize:'0.78rem',color:'var(--color-text2)',lineHeight:1.5,marginBottom:3 }}>
-                      QR link sent in WhatsApp so customer can scan and pay.
-                    </p>
-                    <p style={{ fontSize:'0.7rem',color:'var(--color-text3)' }}>
-                      Or turn screen toward customer to scan directly.
-                    </p>
+              {upiId ? (
+                <div>
+                  <p style={{ fontSize:'0.82rem',color:'var(--color-blue)',marginBottom:'0.6rem' }}>
+                    📲 UPI ID: <strong>{upiId}</strong>
+                  </p>
+                  <div style={{ display:'flex',alignItems:'center',gap:'0.75rem' }}>
+                    {/* Show owner's uploaded QR if available, else show generated QR */}
+                    <img
+                      src={upiQrBase64 || `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent('upi://pay?pa=' + upiId + '&am=' + total.toFixed(2) + '&tn=CueTrack&cu=INR')}`}
+                      alt="UPI QR"
+                      style={{ width:80,height:80,borderRadius:8,border:'1px solid var(--color-border)',objectFit:'cover',flexShrink:0,background:'#fff' }}
+                    />
+                    <div>
+                      <p style={{ fontSize:'0.78rem',color:'var(--color-text2)',lineHeight:1.5,marginBottom:3 }}>
+                        {upiQrBase64 ? 'Your uploaded QR — ' : 'Auto-generated UPI QR — '}
+                        customer can scan directly from this screen or get the link in WhatsApp.
+                      </p>
+                      <p style={{ fontSize:'0.7rem',color:'var(--color-green)',fontWeight:600 }}>
+                        ✓ QR link included in WhatsApp receipt automatically
+                      </p>
+                    </div>
                   </div>
                 </div>
+              ) : (
+                <p style={{ fontSize:'0.78rem',color:'var(--color-amber)' }}>
+                  ⚠ No UPI ID set. Add it in Settings → Payment & UPI.
+                </p>
               )}
             </div>
           )}
@@ -554,6 +547,7 @@ export default function Tables() {
           table={checkoutTarget}
           upiId={settings.upiId}
           upiQrBase64={settings.upiQrBase64}
+          upiQrUrl={settings.upiQrUrl}
           clubName={settings.clubName}
           onClose={() => setCheckoutTarget(null)}
           onConfirm={handleConfirmCheckout}
