@@ -2,6 +2,13 @@ import { initializeApp } from 'firebase/app'
 import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore'
 import { getAuth } from 'firebase/auth'
 
+// ─────────────────────────────────────────────────────────────────────
+// Replace every value below with your actual Firebase project config.
+// Firebase Console → Project Settings → Your apps → Config object
+//
+// NO storageBucket needed — we store the UPI QR as a base64 string
+// directly in Firestore, so no Firebase Storage (paid plan) required.
+// ─────────────────────────────────────────────────────────────────────
 const firebaseConfig = {
   apiKey: "AIzaSyCwPDS8VH-13bsPE6lCuFaaDhLcK1shENI",
   authDomain: "cuetrack-420c7.firebaseapp.com",
@@ -12,10 +19,21 @@ const firebaseConfig = {
 }
 
 const app = initializeApp(firebaseConfig)
+
+// Firestore — the main database (tables, sessions, bills, settings)
 export const db = getFirestore(app)
+
+// Auth — owner login
 export const auth = getAuth(app)
 
-// This is what makes the app work offline
+// ── Offline persistence ───────────────────────────────────────────
+// Mirrors all Firestore data to the browser's IndexedDB so the app
+// keeps working during power cuts / internet drops.
+// When connection returns, all changes sync automatically.
 enableIndexedDbPersistence(db).catch((err) => {
-  console.log('Offline persistence error:', err.code)
+  if (err.code === 'failed-precondition') {
+    console.warn('CueTrack: Offline mode unavailable (multiple tabs open)')
+  } else if (err.code === 'unimplemented') {
+    console.warn('CueTrack: This browser does not support offline mode')
+  }
 })
