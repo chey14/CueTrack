@@ -130,6 +130,52 @@ export default function Analytics() {
     window.open(`https://api.whatsapp.com/send?phone=${phone}&text=${msg}`, '_blank', 'noopener,noreferrer')
   }
 
+  // ── CSV Export ───────────────────────────────────────────────
+  function exportCSV() {
+    if (!bills.length) return
+    const headers = [
+      'Bill No', 'Date', 'Check-in', 'Check-out', 'Duration (min)',
+      'Table', 'Type', 'Size', 'Rate/hr (₹)',
+      'Table Charge (₹)', 'Canteen (₹)', 'Total (₹)',
+      'Payment', 'Customer', 'Phone'
+    ]
+    const rows = bills.map(b => {
+      const checkIn  = b.checkInTime  ? new Date(b.checkInTime)  : null
+      const checkOut = b.checkOutTime ? new Date(b.checkOutTime) : b.createdAt
+      const fmtT = (d) => d ? d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true}) : ''
+      const fmtD = (d) => d ? d.toLocaleDateString('en-IN') : ''
+      return [
+        b.billNumber || '',
+        fmtD(b.createdAt),
+        fmtT(checkIn),
+        fmtT(checkOut),
+        (b.elapsed / 60).toFixed(1),
+        b.tableName,
+        b.tableType || '',
+        b.tableSize || '',
+        (b.ratePerMin * 60).toFixed(0),
+        b.tableCharge?.toFixed(2) || '',
+        b.canteenTotal?.toFixed(2) || '0',
+        b.total.toFixed(2),
+        b.paymentMode,
+        b.customer?.name || '',
+        b.customer?.phone || '',
+      ]
+    })
+    // Build CSV string
+    const csv = [headers, ...rows]
+      .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+      .join('\n')
+    // Download
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href     = url
+    a.download = `cuetrack-bills-${new Date().toISOString().slice(0,10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   // ── Loading / empty states ────────────────────────────────────
   if (loading) return <div style={{ color:'var(--color-text3)',padding:'2rem',textAlign:'center' }}>Loading analytics...</div>
 
@@ -303,14 +349,20 @@ export default function Analytics() {
       {/* ── HISTORY TAB ──────────────────────────────────────── */}
       {activeTab === 'history' && (
         <div>
-          {/* Filter pills */}
-          <div style={{ display:'flex',gap:6,marginBottom:'1.25rem',flexWrap:'wrap' }}>
-            {[['all','All'],['cash','Cash'],['upi','UPI'],['pending','Pending']].map(([val,label]) => (
-              <button key={val} onClick={()=>setHistoryFilter(val)}
-                style={{ padding:'0.35rem 0.85rem',borderRadius:20,border:`1px solid ${historyFilter===val?'var(--color-green)':'var(--color-border)'}`,background:historyFilter===val?'var(--color-green-glow)':'transparent',color:historyFilter===val?'var(--color-green)':'var(--color-text3)',fontFamily:'var(--font-display)',fontWeight:600,fontSize:'0.78rem',cursor:'pointer',transition:'all 0.15s' }}>
-                {label}
-              </button>
-            ))}
+          {/* Filter pills + export */}
+          <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.25rem',flexWrap:'wrap',gap:'0.75rem' }}>
+            <div style={{ display:'flex',gap:6,flexWrap:'wrap' }}>
+              {[['all','All'],['cash','Cash'],['upi','UPI'],['pending','Pending']].map(([val,label]) => (
+                <button key={val} onClick={()=>setHistoryFilter(val)}
+                  style={{ padding:'0.35rem 0.85rem',borderRadius:20,border:`1px solid ${historyFilter===val?'var(--color-green)':'var(--color-border)'}`,background:historyFilter===val?'var(--color-green-glow)':'transparent',color:historyFilter===val?'var(--color-green)':'var(--color-text3)',fontFamily:'var(--font-display)',fontWeight:600,fontSize:'0.78rem',cursor:'pointer',transition:'all 0.15s' }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <button onClick={exportCSV} className="btn-ghost"
+              style={{ fontSize:'0.8rem',padding:'0.4rem 0.9rem',display:'flex',alignItems:'center',gap:'0.4rem' }}>
+              ⬇ Export CSV
+            </button>
           </div>
 
           {/* Bills grouped by date */}
@@ -332,31 +384,42 @@ export default function Analytics() {
 
                 {/* Bills for this date */}
                 <div style={{ display:'flex',flexDirection:'column',gap:'0.4rem' }}>
-                  {dayBills.map(b => (
-                    <div key={b.id} className="card"
-                      style={{ padding:'0.85rem 1.1rem',display:'flex',justifyContent:'space-between',alignItems:'center',gap:'0.75rem',flexWrap:'wrap' }}>
-                      <div>
-                        <div style={{ fontWeight:500,fontSize:'0.88rem' }}>
-                          {b.tableName}
-                          {b.customer?.name && <span style={{ color:'var(--color-text3)',fontWeight:400 }}> · {b.customer.name}</span>}
+                  {dayBills.map(b => {
+                    const checkIn  = b.checkInTime  ? new Date(b.checkInTime)  : null
+                    const checkOut = b.checkOutTime ? new Date(b.checkOutTime) : b.createdAt
+                    const fmtT = (d) => d?.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true}) || '—'
+                    return (
+                      <div key={b.id} className="card"
+                        style={{ padding:'0.85rem 1.1rem',display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'0.75rem',flexWrap:'wrap' }}>
+                        <div style={{ flex:1,minWidth:180 }}>
+                          <div style={{ display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:2 }}>
+                            <span style={{ fontWeight:600,fontSize:'0.88rem' }}>{b.tableName}</span>
+                            {b.customer?.name && <span style={{ color:'var(--color-text3)',fontSize:'0.8rem' }}>· {b.customer.name}</span>}
+                          </div>
+                          {b.billNumber && (
+                            <div style={{ fontSize:'0.7rem',color:'var(--color-green)',fontFamily:'var(--font-display)',fontWeight:600,marginBottom:2 }}>
+                              #{b.billNumber}
+                            </div>
+                          )}
+                          <div style={{ fontSize:'0.72rem',color:'var(--color-text3)',display:'flex',gap:'0.75rem',flexWrap:'wrap' }}>
+                            <span>In: {fmtT(checkIn)}</span>
+                            <span>Out: {fmtT(checkOut)}</span>
+                            <span>{Math.floor(b.elapsed/60)}m {b.elapsed%60}s</span>
+                            {b.canteenTotal>0 && <span>Canteen ₹{b.canteenTotal.toFixed(0)}</span>}
+                          </div>
                         </div>
-                        <div style={{ fontSize:'0.73rem',color:'var(--color-text3)',marginTop:2 }}>
-                          {b.createdAt.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'})}
-                          {' · '}{Math.floor(b.elapsed/60)}m {b.elapsed%60}s
-                          {b.canteenTotal>0 && <span> · canteen ₹{b.canteenTotal.toFixed(0)}</span>}
+                        <div style={{ display:'flex',alignItems:'center',gap:'0.6rem' }}>
+                          <span className={b.paymentMode==='cash'?'tag tag-green':b.paymentMode==='upi'?'tag tag-blue':'tag tag-red'}
+                            style={{ fontSize:'0.68rem',textTransform:'capitalize' }}>
+                            {b.paymentMode}
+                          </span>
+                          <span style={{ fontFamily:'var(--font-display)',fontWeight:700,color:'var(--color-green)',fontSize:'0.95rem' }}>
+                            {inr(b.total)}
+                          </span>
                         </div>
                       </div>
-                      <div style={{ display:'flex',alignItems:'center',gap:'0.6rem' }}>
-                        <span className={b.paymentMode==='cash'?'tag tag-green':b.paymentMode==='upi'?'tag tag-blue':'tag tag-red'}
-                          style={{ fontSize:'0.68rem',textTransform:'capitalize' }}>
-                          {b.paymentMode}
-                        </span>
-                        <span style={{ fontFamily:'var(--font-display)',fontWeight:700,color:'var(--color-green)',fontSize:'0.95rem' }}>
-                          {inr(b.total)}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
             )

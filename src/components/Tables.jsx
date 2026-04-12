@@ -178,6 +178,24 @@ function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, onClose, onC
   const total        = tableCharge + canteenTotal
   const ratePerHour  = (table.ratePerMin * 60).toFixed(0)
 
+  // Compute check-in / check-out times from startTime
+  const now         = new Date()
+  const checkOutTime = now
+  const checkInTime  = table.startTime
+    ? new Date(table.startTime)
+    : new Date(now.getTime() - table.elapsed * 1000)
+
+  function fmtTime(d) {
+    return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })
+  }
+  function fmtDate(d) {
+    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+  }
+
+  // Generate bill number for display (same logic as useTables so it matches)
+  const datePart = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`
+  const billDisplayId = `CT-${datePart}`
+
   // ── WhatsApp message builder ─────────────────────────────────────
   // QR strategy (no paid service needed):
   //   1. If owner set up Cloudinary → use their uploaded UPI QR photo URL
@@ -206,6 +224,8 @@ function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, onClose, onC
       `   Type: ${table.type} · ${table.size} table`,
       `   Time played: *${timeStr}*`,
       `   Rate: ₹${ratePerHour}/hr (₹${table.ratePerMin.toFixed(2)}/min)`,
+      `   Check-in:  *${fmtTime(checkInTime)}*`,
+      `   Check-out: *${fmtTime(checkOutTime)}*`,
       `   Table charge: *${fmt(tableCharge)}*`,
     ]
 
@@ -271,25 +291,40 @@ function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, onClose, onC
 
         {/* Bill preview card */}
         <div style={{ background:'var(--color-bg3)',borderRadius:10,padding:'1rem',marginBottom:'1.25rem',border:'1px solid var(--color-border)' }}>
-          {/* Table info */}
-          <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.6rem' }}>
+          {/* Bill number + date */}
+          <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.75rem',paddingBottom:'0.6rem',borderBottom:'1px solid var(--color-border)' }}>
             <div>
-              <div style={{ fontWeight:600,fontSize:'0.9rem' }}>{table.name}</div>
-              <div style={{ fontSize:'0.75rem',color:'var(--color-text3)',marginTop:1 }}>
+              <div style={{ fontFamily:'var(--font-display)',fontWeight:700,fontSize:'0.95rem' }}>{table.name}</div>
+              <div style={{ fontSize:'0.72rem',color:'var(--color-text3)',marginTop:2 }}>
                 {table.type} · {table.size} · ₹{ratePerHour}/hr
               </div>
             </div>
-            <div style={{ fontFamily:'var(--font-display)',fontWeight:700,fontSize:'1.1rem',color:'var(--color-amber)' }}>
-              {formatTimerDisplay(table.elapsed)}
+            <div style={{ textAlign:'right' }}>
+              <div style={{ fontFamily:'var(--font-display)',fontWeight:700,fontSize:'0.78rem',color:'var(--color-green)' }}>
+                #{billDisplayId}
+              </div>
+              <div style={{ fontSize:'0.7rem',color:'var(--color-text3)',marginTop:1 }}>{fmtDate(now)}</div>
             </div>
           </div>
-          <div style={{ borderTop:'1px solid var(--color-border)',paddingTop:'0.6rem' }}>
-            <BillRow label={`Table (${formatTime(table.elapsed)} @ ₹${table.ratePerMin.toFixed(2)}/min)`} value={fmt(tableCharge)} />
-            {table.canteen.map((item,i) => <BillRow key={i} label={item.name} value={fmt(item.price)} muted />)}
-            <div style={{ display:'flex',justifyContent:'space-between',paddingTop:'0.5rem',marginTop:'0.35rem',borderTop:'1px solid var(--color-border)' }}>
-              <span style={{ fontFamily:'var(--font-display)',fontWeight:700 }}>Total</span>
-              <span style={{ fontFamily:'var(--font-display)',fontWeight:700,color:'var(--color-green)',fontSize:'1.2rem' }}>{fmt(total)}</span>
+
+          {/* Check-in / Check-out times */}
+          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.5rem',marginBottom:'0.75rem',padding:'0.6rem 0.75rem',background:'rgba(255,255,255,0.03)',borderRadius:7 }}>
+            <div>
+              <div style={{ fontSize:'0.68rem',color:'var(--color-text3)',marginBottom:2 }}>Check-in</div>
+              <div style={{ fontSize:'0.85rem',fontWeight:600,color:'var(--color-green)' }}>{fmtTime(checkInTime)}</div>
             </div>
+            <div>
+              <div style={{ fontSize:'0.68rem',color:'var(--color-text3)',marginBottom:2 }}>Check-out</div>
+              <div style={{ fontSize:'0.85rem',fontWeight:600,color:'var(--color-red)' }}>{fmtTime(checkOutTime)}</div>
+            </div>
+          </div>
+
+          {/* Bill lines */}
+          <BillRow label={`Table charge (${formatTime(table.elapsed)} @ ₹${table.ratePerMin.toFixed(2)}/min)`} value={fmt(tableCharge)} />
+          {table.canteen.map((item,i) => <BillRow key={i} label={item.name} value={fmt(item.price)} muted />)}
+          <div style={{ display:'flex',justifyContent:'space-between',paddingTop:'0.5rem',marginTop:'0.35rem',borderTop:'1px solid var(--color-border)' }}>
+            <span style={{ fontFamily:'var(--font-display)',fontWeight:700 }}>Total</span>
+            <span style={{ fontFamily:'var(--font-display)',fontWeight:700,color:'var(--color-green)',fontSize:'1.2rem' }}>{fmt(total)}</span>
           </div>
         </div>
 

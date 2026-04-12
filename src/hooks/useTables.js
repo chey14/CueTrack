@@ -86,25 +86,38 @@ export function useTables(settingsTables) {
   async function checkoutTable(table, paymentMode, total) {
     if (!uid()) return
 
-    // 1. Save the completed bill to the bills collection
-    // addDoc auto-generates a unique ID for each bill
+    const now = Date.now()
+    // Generate a human-readable bill number: CT-YYYYMMDD-XXXX
+    // e.g. CT-20250415-3F7A
+    const d = new Date(now)
+    const datePart = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`
+    const randPart = Math.random().toString(36).substring(2,6).toUpperCase()
+    const billNumber = `CT-${datePart}-${randPart}`
+
+    // Check-in time = now minus elapsed seconds
+    const checkInTime  = new Date(now - table.elapsed * 1000)
+    const checkOutTime = new Date(now)
+
     await addDoc(billsCol(), {
-      tableId:    String(table.id),
-      tableName:  table.name,
-      tableType:  table.type,
-      tableSize:  table.size,
-      elapsed:    table.elapsed,
-      ratePerMin: table.ratePerMin,
-      tableCharge: parseFloat((table.elapsed * table.ratePerMin / 60).toFixed(2)),
-      canteen:    table.canteen,
+      billNumber,
+      tableId:      String(table.id),
+      tableName:    table.name,
+      tableType:    table.type,
+      tableSize:    table.size,
+      elapsed:      table.elapsed,
+      ratePerMin:   table.ratePerMin,
+      tableCharge:  parseFloat((table.elapsed * table.ratePerMin / 60).toFixed(2)),
+      canteen:      table.canteen,
       canteenTotal: parseFloat(table.canteen.reduce((s, i) => s + i.price, 0).toFixed(2)),
-      total:      parseFloat(total.toFixed(2)),
+      total:        parseFloat(total.toFixed(2)),
       paymentMode,
-      customer:   table.customer ?? null,
-      createdAt:  serverTimestamp(),  // Firestore server timestamp — reliable across timezones
+      customer:     table.customer ?? null,
+      checkInTime:  checkInTime.toISOString(),   // stored as ISO string — readable everywhere
+      checkOutTime: checkOutTime.toISOString(),
+      createdAt:    serverTimestamp(),
     })
 
-    // 2. Reset the table back to available
+    // Reset the table back to available
     await updateTable(String(table.id), {
       status: 'available',
       elapsed: 0,
