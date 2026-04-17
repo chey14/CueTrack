@@ -1,72 +1,77 @@
 // src/hooks/useTables.js
-//
-// This hook manages all table session data in Firestore.
-// Structure in Firestore:
-//   clubs/{uid}/tables/{tableId}   ← live table state (status, timer, etc.)
-//   clubs/{uid}/bills/{billId}     ← completed bill records
-//
-// The onSnapshot listener means all changes sync in real-time —
-// if you have two devices open (e.g. tablet at desk + phone in pocket),
-// both show the same live state.
-
 import { useState, useEffect } from 'react'
 import {
   collection, doc, onSnapshot, setDoc, addDoc,
-  serverTimestamp, writeBatch
+  serverTimestamp, runTransaction, getDoc
 } from 'firebase/firestore'
 import { db, auth } from '../firebase'
 
-function uid() { return auth.currentUser?.uid }
+function uid()       { return auth.currentUser?.uid }
 function tablesCol() { return collection(db, 'clubs', uid(), 'tables') }
 function billsCol()  { return collection(db, 'clubs', uid(), 'bills')  }
+function counterRef(){ return doc(db, 'clubs', uid(), 'settings', 'billCounter') }
+
+// Sequential bill number: CT-YYYYMMDD-001, 002, ...
+// Counter is stored in Firestore and increments atomically
+// so two simultaneous checkouts never get the same number.
+// The counter never resets — #42 today means #43 tomorrow.
+async function getNextBillNumber() {
+  const d   = new Date()
+  const date = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`
+
+  let seq = 1
+  try {
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(counterRef())
+      seq = snap.exists() ? (snap.data().count || 0) + 1 : 1
+      tx.set(counterRef(), { count: seq }, { merge: true })
+    })
+  } catch (e) {
+    // Fallback if transaction fails — use timestamp-based number
+    seq = Math.floor(Date.now() / 1000) % 10000
+  }
+
+  return `CT-${date}-${String(seq).padStart(3, '0')}`
+}
 
 export function useTables(settingsTables) {
-  // tableStates: { [tableId]: { status, elapsed, startTime, canteen, customer } }
   const [tableStates, setTableStates] = useState({})
   const [loading, setLoading] = useState(true)
 
-  // Real-time listener on the tables sub-collection
   useEffect(() => {
     if (!uid()) { setLoading(false); return }
-
     const unsub = onSnapshot(tablesCol(), (snap) => {
       const states = {}
-      snap.forEach(docSnap => {
-        states[docSnap.id] = docSnap.data()
-      })
+      snap.forEach(d => { states[d.id] = d.data() })
       setTableStates(states)
       setLoading(false)
     })
     return unsub
   }, [])
 
-  // Merge settings tables with live Firestore states
-  // settingsTables = [ { id, name, type, size, ratePerMin } ]
-  // For each, we pull in the live status from Firestore (or default to available)
   const tables = (settingsTables || []).map(t => ({
     ...t,
-    status:    tableStates[t.id]?.status    ?? 'available',
-    elapsed:   tableStates[t.id]?.elapsed   ?? 0,
-    startTime: tableStates[t.id]?.startTime ?? null,
-    canteen:   tableStates[t.id]?.canteen   ?? [],
-    customer:  tableStates[t.id]?.customer  ?? null,
+    status:       tableStates[t.id]?.status       ?? 'available',
+    elapsed:      tableStates[t.id]?.elapsed       ?? 0,
+    startTime:    tableStates[t.id]?.startTime     ?? null,
+    lateMinutes:  tableStates[t.id]?.lateMinutes   ?? 0,
+    canteen:      tableStates[t.id]?.canteen       ?? [],
+    customer:     tableStates[t.id]?.customer      ?? null,
   }))
 
-  // Write a table state update to Firestore
-  // writeBatch isn't needed for single writes, but setDoc with merge is perfect
   async function updateTable(tableId, updates) {
     if (!uid()) return
-    const ref = doc(tablesCol(), String(tableId))
-    await setDoc(ref, updates, { merge: true })
+    await setDoc(doc(tablesCol(), String(tableId)), updates, { merge: true })
   }
 
-  async function startTable(tableId, customer) {
+  async function startTable(tableId, customer, lateMinutes = 0) {
     await updateTable(tableId, {
-      status: 'running',
-      startTime: Date.now(),
-      elapsed: 0,
-      canteen: [],
-      customer: customer ?? null,
+      status:      'running',
+      startTime:   Date.now(),
+      elapsed:     0,
+      lateMinutes: lateMinutes || 0,
+      canteen:     [],
+      customer:    customer ?? null,
     })
   }
 
@@ -82,20 +87,23 @@ export function useTables(settingsTables) {
     await updateTable(tableId, { canteen: [...currentCanteen, ...newItems] })
   }
 
-  // Checkout: save a bill record, then reset the table
-  async function checkoutTable(table, paymentMode, total) {
+  async function removeCanteenItem(tableId, currentCanteen, index) {
+    const updated = currentCanteen.filter((_, i) => i !== index)
+    await updateTable(tableId, { canteen: updated })
+  }
+
+  async function updateCustomer(tableId, customer) {
+    await updateTable(tableId, { customer })
+  }
+
+  // checkout accepts a full bill object so the modal can pass discount, split payment, etc.
+  async function checkoutTable(table, billData) {
     if (!uid()) return
 
-    const now = Date.now()
-    // Generate a human-readable bill number: CT-YYYYMMDD-XXXX
-    // e.g. CT-20250415-3F7A
-    const d = new Date(now)
-    const datePart = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`
-    const randPart = Math.random().toString(36).substring(2,6).toUpperCase()
-    const billNumber = `CT-${datePart}-${randPart}`
-
-    // Check-in time = now minus elapsed seconds
-    const checkInTime  = new Date(now - table.elapsed * 1000)
+    const now          = Date.now()
+    const billNumber   = await getNextBillNumber()
+    const lateMs       = (table.lateMinutes || 0) * 60 * 1000
+    const checkInTime  = new Date(now - table.elapsed * 1000 - lateMs)
     const checkOutTime = new Date(now)
 
     await addDoc(billsCol(), {
@@ -105,27 +113,35 @@ export function useTables(settingsTables) {
       tableType:    table.type,
       tableSize:    table.size,
       elapsed:      table.elapsed,
+      lateMinutes:  table.lateMinutes || 0,
       ratePerMin:   table.ratePerMin,
-      tableCharge:  parseFloat((table.elapsed * table.ratePerMin / 60).toFixed(2)),
+      tableCharge:  billData.tableCharge,
       canteen:      table.canteen,
-      canteenTotal: parseFloat(table.canteen.reduce((s, i) => s + i.price, 0).toFixed(2)),
-      total:        parseFloat(total.toFixed(2)),
-      paymentMode,
+      canteenTotal: billData.canteenTotal,
+      discount:     billData.discount || 0,
+      total:        billData.total,
+      paymentMode:  billData.paymentMode,   // 'cash' | 'upi' | 'split' | 'paid_pending'
+      cashAmount:   billData.cashAmount  || 0,
+      upiAmount:    billData.upiAmount   || 0,
+      pendingAmount:billData.pendingAmount || 0,
       customer:     table.customer ?? null,
-      checkInTime:  checkInTime.toISOString(),   // stored as ISO string — readable everywhere
+      checkInTime:  checkInTime.toISOString(),
       checkOutTime: checkOutTime.toISOString(),
       createdAt:    serverTimestamp(),
     })
 
-    // Reset the table back to available
     await updateTable(String(table.id), {
-      status: 'available',
-      elapsed: 0,
-      startTime: null,
-      canteen: [],
-      customer: null,
+      status: 'available', elapsed: 0, startTime: null,
+      lateMinutes: 0, canteen: [], customer: null,
     })
+
+    return billNumber
   }
 
-  return { tables, loading, startTable, pauseTable, resumeTable, addCanteenItems, checkoutTable }
+  return {
+    tables, loading,
+    startTable, pauseTable, resumeTable,
+    addCanteenItems, removeCanteenItem, updateCustomer,
+    checkoutTable,
+  }
 }

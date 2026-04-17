@@ -2,22 +2,24 @@ import { useState, useEffect } from 'react'
 import { useClubSettings } from '../hooks/useClubSettings'
 import { useTables } from '../hooks/useTables'
 
-// ── Helpers ──────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────────
 function formatTime(s) {
-  const h = Math.floor(s / 3600)
-  const m = Math.floor((s % 3600) / 60)
-  const sec = s % 60
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60
   if (h > 0) return `${h} hr ${String(m).padStart(2,'0')} min`
   if (m > 0) return `${m} min ${String(sec).padStart(2,'0')} sec`
   return `${sec} sec`
 }
-// Compact timer display for the card (HH:MM:SS)
 function formatTimerDisplay(s) {
   const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60
   if (h > 0) return `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
   return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
 }
-function fmt(n) { return `₹${Number(n).toFixed(2)}` }
+// Round to nearest rupee for display
+function fmtRound(n) { return `₹${Math.round(n)}` }
+function fmt(n)      { return `₹${Number(n).toFixed(2)}` }
+function fmtTime12(d) {
+  return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })
+}
 
 const SAVED_MENU = [
   { id: 1, name: 'Coke',       price: 40,  category: 'Drinks' },
@@ -29,49 +31,63 @@ const SAVED_MENU = [
   { id: 7, name: 'Maggi',      price: 50,  category: 'Snacks' },
 ]
 
-// QR upload handled by useClubSettings hook (Cloudinary)
+// Simple PIN for discount/canteen encryption — owner sets this in Settings
+// For now hardcoded; later can be stored in Firestore settings
+const OWNER_PIN = '1234'
 
-// ── Modal wrapper ────────────────────────────────────────────────
 function Modal({ children, onClose }) {
   return (
-    <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.75)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:'1rem' }}
+    <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,0.78)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center',padding:'1rem' }}
       onClick={onClose}>
       <div onClick={e => e.stopPropagation()}>{children}</div>
     </div>
   )
 }
 
-// ── Start session modal ──────────────────────────────────────────
-function StartModal({ table, onConfirm, onClose }) {
-  const [name, setName] = useState('')
-  const [phone, setPhone] = useState('')
+// ── Start / Edit customer modal ───────────────────────────────────
+function CustomerModal({ table, isEditing, onConfirm, onClose }) {
+  const existing = table.customer || {}
+  const [name,        setName]        = useState(existing.name  || '')
+  const [phone,       setPhone]       = useState(existing.phone || '')
+  const [lateMinutes, setLateMinutes] = useState(table.lateMinutes || 0)
+
   return (
     <Modal onClose={onClose}>
-      <div className="card" style={{ width:'100%',maxWidth:360,padding:'1.5rem' }}>
+      <div className="card" style={{ width:'100%',maxWidth:380,padding:'1.5rem' }}>
         <h3 style={{ fontFamily:'var(--font-display)',fontWeight:700,marginBottom:'0.35rem' }}>
-          Start — {table.name}
+          {isEditing ? `Edit customer — ${table.name}` : `Start — ${table.name}`}
         </h3>
         <p style={{ fontSize:'0.82rem',color:'var(--color-text3)',marginBottom:'1.25rem' }}>
-          Customer details are optional. Skip to start directly.
+          All fields optional. Can be updated any time during the session.
         </p>
+
         <div style={{ display:'flex',flexDirection:'column',gap:'0.75rem',marginBottom:'1.25rem' }}>
           <div>
-            <label style={lbl}>Customer name (optional)</label>
+            <label style={lbl}>Customer name</label>
             <input className="input-field" placeholder="e.g. Arjun" value={name} onChange={e=>setName(e.target.value)} />
           </div>
           <div>
-            <label style={lbl}>WhatsApp number (optional)</label>
+            <label style={lbl}>WhatsApp number</label>
             <input className="input-field" placeholder="9876543210" value={phone} onChange={e=>setPhone(e.target.value)} />
-            <p style={{ fontSize:'0.72rem',color:'var(--color-text3)',marginTop:3 }}>
-              10-digit number — country code added automatically.
-            </p>
+            <p style={{ fontSize:'0.72rem',color:'var(--color-text3)',marginTop:3 }}>10-digit, country code added automatically.</p>
           </div>
+          {!isEditing && (
+            <div>
+              <label style={lbl}>Late check-in (minutes)</label>
+              <input className="input-field" type="number" min="0" placeholder="0"
+                value={lateMinutes} onChange={e=>setLateMinutes(parseInt(e.target.value)||0)} />
+              <p style={{ fontSize:'0.72rem',color:'var(--color-text3)',marginTop:3 }}>
+                If customer arrived earlier — timer will reflect actual play time. Not shown on bill.
+              </p>
+            </div>
+          )}
         </div>
+
         <div style={{ display:'flex',gap:'0.6rem' }}>
           <button onClick={onClose} className="btn-ghost" style={{ flex:1,justifyContent:'center' }}>Cancel</button>
-          <button onClick={() => onConfirm({ name:name.trim(), phone:phone.trim() })}
+          <button onClick={() => onConfirm({ name:name.trim(), phone:phone.trim() }, lateMinutes)}
             className="btn-primary" style={{ flex:1,justifyContent:'center' }}>
-            ▶ Start Timer
+            {isEditing ? 'Update' : '▶ Start Timer'}
           </button>
         </div>
       </div>
@@ -79,13 +95,14 @@ function StartModal({ table, onConfirm, onClose }) {
   )
 }
 
-// ── Canteen modal ────────────────────────────────────────────────
+// ── Canteen modal ─────────────────────────────────────────────────
+// Feature 8: standalone canteen sale (no table session)
 function CanteenModal({ table, onAdd, onClose }) {
   const [tab, setTab] = useState('menu')
   const [qty, setQty] = useState({})
   const [custom, setCustom] = useState({ name:'', price:'', qty:1 })
   const categories = [...new Set(SAVED_MENU.map(i => i.category))]
-  const totalSelected = SAVED_MENU.reduce((s,i) => s + (qty[i.id]||0)*i.price, 0)
+  const totalSelected = SAVED_MENU.reduce((s,i) => s+(qty[i.id]||0)*i.price, 0)
 
   function handleAddFromMenu() {
     const items = SAVED_MENU.flatMap(item => {
@@ -99,7 +116,7 @@ function CanteenModal({ table, onAdd, onClose }) {
 
   function handleAddCustom(e) {
     e.preventDefault()
-    const count = parseInt(custom.qty) || 1
+    const count = parseInt(custom.qty)||1
     onAdd([{ name: count>1 ? `${custom.name} ×${count}` : custom.name, price: parseFloat(custom.price)*count }])
     onClose()
   }
@@ -108,15 +125,15 @@ function CanteenModal({ table, onAdd, onClose }) {
     <Modal onClose={onClose}>
       <div className="card" style={{ width:'100%',maxWidth:420,padding:'1.5rem',maxHeight:'85vh',overflowY:'auto' }}>
         <h3 style={{ fontFamily:'var(--font-display)',fontWeight:700,marginBottom:'1rem' }}>
-          Add to {table.name}
+          {table ? `Add to ${table.name}` : 'Canteen sale (no table)'}
         </h3>
         <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',background:'var(--color-bg3)',borderRadius:8,padding:3,marginBottom:'1rem' }}>
-          {[['menu','📋 Saved menu'],['custom','✏️ Custom']].map(([id,label]) => (
+          {[['menu','📋 Menu'],['custom','✏️ Custom']].map(([id,label]) => (
             <button key={id} onClick={()=>setTab(id)} style={{ padding:'0.45rem',borderRadius:6,border:'none',cursor:'pointer',fontFamily:'var(--font-display)',fontWeight:600,fontSize:'0.8rem',background:tab===id?'var(--color-surface)':'transparent',color:tab===id?'var(--color-text)':'var(--color-text3)',transition:'all 0.15s' }}>{label}</button>
           ))}
         </div>
 
-        {tab === 'menu' && (
+        {tab==='menu' && (
           <div>
             {categories.map(cat => (
               <div key={cat} style={{ marginBottom:'0.85rem' }}>
@@ -136,27 +153,27 @@ function CanteenModal({ table, onAdd, onClose }) {
                 ))}
               </div>
             ))}
-            {totalSelected > 0 && (
+            {totalSelected>0 && (
               <div style={{ display:'flex',justifyContent:'space-between',borderTop:'1px solid var(--color-border)',paddingTop:'0.6rem',marginBottom:'0.75rem' }}>
                 <span style={{ fontSize:'0.85rem',color:'var(--color-text2)' }}>Total</span>
-                <span style={{ fontFamily:'var(--font-display)',fontWeight:700,color:'var(--color-amber)' }}>{fmt(totalSelected)}</span>
+                <span style={{ fontFamily:'var(--font-display)',fontWeight:700,color:'var(--color-amber)' }}>{fmtRound(totalSelected)}</span>
               </div>
             )}
             <div style={{ display:'flex',gap:'0.5rem' }}>
               <button onClick={onClose} className="btn-ghost" style={{ flex:1,justifyContent:'center' }}>Cancel</button>
-              <button onClick={handleAddFromMenu} className="btn-primary" style={{ flex:1,justifyContent:'center' }} disabled={!totalSelected}>Add to bill</button>
+              <button onClick={handleAddFromMenu} className="btn-primary" style={{ flex:1,justifyContent:'center' }} disabled={!totalSelected}>Add</button>
             </div>
           </div>
         )}
 
-        {tab === 'custom' && (
+        {tab==='custom' && (
           <form onSubmit={handleAddCustom} style={{ display:'flex',flexDirection:'column',gap:'0.75rem' }}>
             <div><label style={lbl}>Item name *</label><input className="input-field" required placeholder="Red Bull" value={custom.name} onChange={e=>setCustom({...custom,name:e.target.value})} /></div>
             <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.6rem' }}>
               <div><label style={lbl}>Price per item (₹) *</label><input className="input-field" required type="number" min="0" step="0.5" placeholder="60" value={custom.price} onChange={e=>setCustom({...custom,price:e.target.value})} /></div>
               <div><label style={lbl}>Quantity</label><input className="input-field" type="number" min="1" placeholder="1" value={custom.qty} onChange={e=>setCustom({...custom,qty:e.target.value})} /></div>
             </div>
-            {custom.name && custom.price && <div style={{ fontSize:'0.82rem',color:'var(--color-amber)',fontWeight:600 }}>Total: ₹{(parseFloat(custom.price||0)*parseInt(custom.qty||1)).toFixed(2)}</div>}
+            {custom.name&&custom.price && <div style={{ fontSize:'0.82rem',color:'var(--color-amber)',fontWeight:600 }}>Total: {fmtRound(parseFloat(custom.price||0)*parseInt(custom.qty||1))}</div>}
             <div style={{ display:'flex',gap:'0.5rem' }}>
               <button type="button" onClick={onClose} className="btn-ghost" style={{ flex:1,justifyContent:'center' }}>Cancel</button>
               <button type="submit" className="btn-primary" style={{ flex:1,justifyContent:'center' }}>Add</button>
@@ -168,209 +185,255 @@ function CanteenModal({ table, onAdd, onClose }) {
   )
 }
 
-// ── Bill modal ───────────────────────────────────────────────────
+// ── Bill / Checkout modal ─────────────────────────────────────────
 function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, onClose, onConfirm }) {
   const [paymentMode, setPaymentMode] = useState('cash')
-  const [sending, setSending] = useState('')
+  const [cashAmt,     setCashAmt]     = useState('')
+  const [upiAmt,      setUpiAmt]      = useState('')
+  const [sending,     setSending]     = useState('')
+  // Discount — protected by PIN
+  const [showDiscount,  setShowDiscount]  = useState(false)
+  const [discountPin,   setDiscountPin]   = useState('')
+  const [pinError,      setPinError]      = useState(false)
+  const [discountAmt,   setDiscountAmt]   = useState(0)
+  const [pinUnlocked,   setPinUnlocked]   = useState(false)
 
   const tableCharge  = table.elapsed * table.ratePerMin / 60
-  const canteenTotal = table.canteen.reduce((s,i) => s+i.price, 0)
-  const total        = tableCharge + canteenTotal
-  const ratePerHour  = (table.ratePerMin * 60).toFixed(0)
+  const canteenTotal = table.canteen.reduce((s,i)=>s+i.price, 0)
+  const subtotal     = Math.round(tableCharge + canteenTotal)  // rounded
+  const total        = Math.max(0, subtotal - Math.round(discountAmt))
+  const ratePerHour  = Math.round(table.ratePerMin * 60)
 
-  // Compute check-in / check-out times from startTime
-  const now         = new Date()
+  const now          = new Date()
   const checkOutTime = now
   const checkInTime  = table.startTime
     ? new Date(table.startTime)
     : new Date(now.getTime() - table.elapsed * 1000)
 
-  function fmtTime(d) {
-    return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })
-  }
-  function fmtDate(d) {
-    return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+  // Split payment validation
+  const splitCash = parseFloat(cashAmt) || 0
+  const splitUpi  = parseFloat(upiAmt)  || 0
+  const splitSum  = splitCash + splitUpi
+  const splitOk   = paymentMode !== 'split' || Math.abs(splitSum - total) < 1
+
+  // Pending amount for UPI+PENDING mode
+  const paidAmt    = parseFloat(cashAmt) || 0
+  const pendingAmt = Math.max(0, total - paidAmt)
+
+  function verifyPin() {
+    if (discountPin === OWNER_PIN) { setPinUnlocked(true); setPinError(false) }
+    else { setPinError(true); setDiscountPin('') }
   }
 
-  // Generate bill number for display (same logic as useTables so it matches)
-  const datePart = `${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}`
-  const billDisplayId = `CT-${datePart}`
-
-  // ── WhatsApp message builder ─────────────────────────────────────
-  // QR strategy (no paid service needed):
-  //   1. If owner set up Cloudinary → use their uploaded UPI QR photo URL
-  //   2. Otherwise → generate a UPI deep-link QR on-the-fly using
-  //      api.qrserver.com (free, no account, no limits).
-  //      The generated QR encodes "upi://pay?pa=UPI_ID&am=AMOUNT&tn=CueTrack"
-  //      — when customer scans it, any UPI app (PhonePe/GPay/Paytm) opens
-  //      directly with the amount pre-filled. No manual entry needed.
-  function buildMessage() {
+  function buildMessage(billNo) {
     const displayClub = clubName || 'CueTrack'
-    const customerGreet = table.customer?.name ? `Hi *${table.customer.name}*! ` : ''
-
-    const h = Math.floor(table.elapsed / 3600)
-    const m = Math.floor((table.elapsed % 3600) / 60)
-    const s = table.elapsed % 60
-    const timeStr = h > 0
-      ? `${h} hr ${String(m).padStart(2,'0')} min`
-      : `${m} min ${String(s).padStart(2,'0')} sec`
+    const greet = table.customer?.name ? `Hi *${table.customer.name}*! ` : ''
+    const h = Math.floor(table.elapsed/3600), m = Math.floor((table.elapsed%3600)/60), s = table.elapsed%60
+    const timeStr = h>0 ? `${h} hr ${String(m).padStart(2,'0')} min` : `${m} min ${String(s).padStart(2,'0')} sec`
 
     const lines = [
-      `${customerGreet}Here's your bill! 🎱`,
-      ``,
-      `🏪 *${displayClub}*`,
-      `━━━━━━━━━━━━━━━━`,
-      `🎱 *${table.name}*`,
-      `   Type: ${table.type} · ${table.size} table`,
-      `   Time played: *${timeStr}*`,
-      `   Rate: ₹${ratePerHour}/hr (₹${table.ratePerMin.toFixed(2)}/min)`,
-      `   Check-in:  *${fmtTime(checkInTime)}*`,
-      `   Check-out: *${fmtTime(checkOutTime)}*`,
-      `   Table charge: *${fmt(tableCharge)}*`,
+      `${greet}Here's your bill! 🎱`,
+      ``, `🏪 *${displayClub}*`, `━━━━━━━━━━━━━━━━`,
+      `🎱 *${table.name}* (${table.type} · ${table.size})`,
+      `   Bill No: *${billNo || '—'}*`,
+      `   Check-in:  *${fmtTime12(checkInTime)}*`,
+      `   Check-out: *${fmtTime12(checkOutTime)}*`,
+      `   Time: *${timeStr}*`,
+      `   Rate: ₹${ratePerHour}/hr`,
+      `   Table: *${fmtRound(tableCharge)}*`,
     ]
-
-    if (table.canteen.length > 0) {
-      lines.push(``, `🍟 *Canteen items:*`)
-      table.canteen.forEach(i => lines.push(`   • ${i.name}  →  ${fmt(i.price)}`))
+    if (table.canteen.length>0) {
+      lines.push(``, `🍟 *Canteen:*`)
+      table.canteen.forEach(i => lines.push(`   • ${i.name}  →  ${fmtRound(i.price)}`))
     }
-
-    lines.push(
-      ``,
-      `━━━━━━━━━━━━━━━━`,
-      `💰 *Total: ${fmt(total)}*`,
-      `💳 Payment: *${paymentMode === 'upi' ? 'UPI' : paymentMode === 'cash' ? 'Cash' : 'Pending'}*`,
-    )
-
-    if (paymentMode === 'upi' && upiId) {
-      // UPI deep-link QR: encodes upi://pay?pa=ID&am=AMOUNT&tn=NOTE
-      // Customer scans → UPI app opens with everything pre-filled
-      const upiDeepLink = `upi://pay?pa=${upiId}&am=${total.toFixed(2)}&tn=CueTrack-${displayClub}&cu=INR`
-      // api.qrserver.com generates a clean scannable QR as a PNG link — completely free
-      const generatedQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(upiDeepLink)}`
-      // Use owner's uploaded QR photo if available, else use the generated one
-      const finalQrUrl = upiQrUrl || generatedQrUrl
-      lines.push(
-        ``,
-        `📲 *Pay via UPI:*`,
-        `UPI ID: ${upiId}`,
-        ``,
-        `📷 *Scan QR to pay ₹${total.toFixed(2)}:*`,
-        finalQrUrl,
-        `_(Tap the link → scan QR in PhonePe / GPay / Paytm)_`,
-      )
+    if (discountAmt>0) lines.push(`   Discount: -${fmtRound(discountAmt)}`)
+    lines.push(``, `━━━━━━━━━━━━━━━━`, `💰 *Total: ${fmtRound(total)}*`)
+    const pmLabel = { cash:'Cash', upi:'UPI', split:'UPI + Cash', paid_pending:'Part paid' }[paymentMode] || paymentMode
+    lines.push(`💳 *Payment: ${pmLabel}*`)
+    if (paymentMode==='split') lines.push(`   Cash: ${fmtRound(splitCash)}  ·  UPI: ${fmtRound(splitUpi)}`)
+    if (paymentMode==='paid_pending') lines.push(`   Paid: ${fmtRound(paidAmt)}  ·  Pending: ${fmtRound(pendingAmt)}`)
+    if ((paymentMode==='upi'||paymentMode==='split') && upiId) {
+      const upiLink = `upi://pay?pa=${upiId}&am=${(paymentMode==='split'?splitUpi:total)}&tn=CueTrack&cu=INR`
+      const qrUrl2  = upiQrUrl || `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(upiLink)}`
+      lines.push(``, `📲 *UPI ID:* ${upiId}`, `📷 *Scan QR:* ${qrUrl2}`)
     }
-
     lines.push(``, `Thank you for playing! See you soon 🎱`)
     return encodeURIComponent(lines.join('\n'))
   }
 
-  async function sendWhatsApp() {
-    let phone = (table.customer?.phone || '').replace(/\D/g, '')
-    if (!phone) return
-    if (phone.length === 10) phone = '91' + phone
+  async function handleConfirm() {
+    if (!splitOk) return
+    const billData = {
+      tableCharge:   Math.round(tableCharge),
+      canteenTotal:  Math.round(canteenTotal),
+      discount:      Math.round(discountAmt),
+      total,
+      paymentMode,
+      cashAmount:    paymentMode==='cash'         ? total       : paymentMode==='split'        ? splitCash  : paymentMode==='paid_pending' ? paidAmt : 0,
+      upiAmount:     paymentMode==='upi'          ? total       : paymentMode==='split'        ? splitUpi   : 0,
+      pendingAmount: paymentMode==='paid_pending' ? pendingAmt  : 0,
+    }
+    const billNo = await onConfirm(billData)
+    // Send WhatsApp after confirming (so we have the bill number)
+    if (table.customer?.phone) {
+      let phone = table.customer.phone.replace(/\D/g,'')
+      if (phone.length===10) phone='91'+phone
+      setSending('opening')
+      const url = `https://api.whatsapp.com/send?phone=${phone}&text=${buildMessage(billNo)}`
+      window.open(url,'_blank','noopener,noreferrer')
+      setSending('')
+    }
+  }
+
+  async function sendWhatsAppOnly() {
+    if (!table.customer?.phone) return
+    let phone = table.customer.phone.replace(/\D/g,'')
+    if (phone.length===10) phone='91'+phone
     setSending('opening')
-    const msg = buildMessage()
-    const url = `https://api.whatsapp.com/send?phone=${phone}&text=${msg}`
-    window.open(url, '_blank', 'noopener,noreferrer')
+    const url = `https://api.whatsapp.com/send?phone=${phone}&text=${buildMessage('')}`
+    window.open(url,'_blank','noopener,noreferrer')
     setSending('')
   }
 
-  const sendBtnLabel = sending === 'opening' ? '📲 Opening WhatsApp...' : '📲 Send Receipt'
+  const PAYMENT_MODES = [
+    { id:'cash',        label:'Cash'         },
+    { id:'upi',         label:'UPI'          },
+    { id:'split',       label:'UPI + Cash'   },
+    { id:'paid_pending',label:'Paid + Pending'},
+  ]
 
   return (
     <Modal onClose={onClose}>
-      <div className="card" style={{ width:'100%',maxWidth:480,padding:'1.75rem',maxHeight:'92vh',overflowY:'auto' }}>
+      <div className="card" style={{ width:'100%',maxWidth:500,padding:'1.75rem',maxHeight:'93vh',overflowY:'auto' }}>
         <h3 style={{ fontFamily:'var(--font-display)',fontWeight:700,fontSize:'1.1rem',marginBottom:'0.25rem' }}>
           Checkout — {table.name}
         </h3>
         {table.customer?.name && (
-          <p style={{ fontSize:'0.82rem',color:'var(--color-text3)',marginBottom:'1rem' }}>
+          <p style={{ fontSize:'0.82rem',color:'var(--color-text3)',marginBottom:'0.75rem' }}>
             👤 {table.customer.name}{table.customer.phone ? ` · ${table.customer.phone}` : ''}
           </p>
         )}
 
-        {/* Bill preview card */}
+        {/* Bill preview */}
         <div style={{ background:'var(--color-bg3)',borderRadius:10,padding:'1rem',marginBottom:'1.25rem',border:'1px solid var(--color-border)' }}>
-          {/* Bill number + date */}
           <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.75rem',paddingBottom:'0.6rem',borderBottom:'1px solid var(--color-border)' }}>
             <div>
               <div style={{ fontFamily:'var(--font-display)',fontWeight:700,fontSize:'0.95rem' }}>{table.name}</div>
-              <div style={{ fontSize:'0.72rem',color:'var(--color-text3)',marginTop:2 }}>
-                {table.type} · {table.size} · ₹{ratePerHour}/hr
-              </div>
+              <div style={{ fontSize:'0.72rem',color:'var(--color-text3)',marginTop:2 }}>{table.type} · {table.size} · ₹{ratePerHour}/hr</div>
             </div>
-            <div style={{ textAlign:'right' }}>
-              <div style={{ fontFamily:'var(--font-display)',fontWeight:700,fontSize:'0.78rem',color:'var(--color-green)' }}>
-                #{billDisplayId}
-              </div>
-              <div style={{ fontSize:'0.7rem',color:'var(--color-text3)',marginTop:1 }}>{fmtDate(now)}</div>
+            <div style={{ fontFamily:'var(--font-display)',fontWeight:700,fontSize:'1.2rem',color:'var(--color-amber)' }}>
+              {formatTimerDisplay(table.elapsed)}
             </div>
           </div>
 
-          {/* Check-in / Check-out times */}
-          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.5rem',marginBottom:'0.75rem',padding:'0.6rem 0.75rem',background:'rgba(255,255,255,0.03)',borderRadius:7 }}>
+          {/* Check-in / out */}
+          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.5rem',marginBottom:'0.75rem',padding:'0.55rem 0.7rem',background:'rgba(255,255,255,0.03)',borderRadius:7 }}>
             <div>
               <div style={{ fontSize:'0.68rem',color:'var(--color-text3)',marginBottom:2 }}>Check-in</div>
-              <div style={{ fontSize:'0.85rem',fontWeight:600,color:'var(--color-green)' }}>{fmtTime(checkInTime)}</div>
+              <div style={{ fontSize:'0.85rem',fontWeight:600,color:'var(--color-green)' }}>{fmtTime12(checkInTime)}</div>
             </div>
             <div>
               <div style={{ fontSize:'0.68rem',color:'var(--color-text3)',marginBottom:2 }}>Check-out</div>
-              <div style={{ fontSize:'0.85rem',fontWeight:600,color:'var(--color-red)' }}>{fmtTime(checkOutTime)}</div>
+              <div style={{ fontSize:'0.85rem',fontWeight:600,color:'var(--color-red)' }}>{fmtTime12(checkOutTime)}</div>
             </div>
           </div>
 
-          {/* Bill lines */}
-          <BillRow label={`Table charge (${formatTime(table.elapsed)} @ ₹${table.ratePerMin.toFixed(2)}/min)`} value={fmt(tableCharge)} />
-          {table.canteen.map((item,i) => <BillRow key={i} label={item.name} value={fmt(item.price)} muted />)}
+          {/* Line items */}
+          <BillRow label={`Table (${formatTime(table.elapsed)} @ ₹${table.ratePerMin.toFixed(2)}/min)`} value={fmtRound(tableCharge)} />
+          {table.canteen.map((item,i) => <BillRow key={i} label={item.name} value={fmtRound(item.price)} muted />)}
+          {discountAmt>0 && <BillRow label="Discount" value={`-${fmtRound(discountAmt)}`} muted />}
           <div style={{ display:'flex',justifyContent:'space-between',paddingTop:'0.5rem',marginTop:'0.35rem',borderTop:'1px solid var(--color-border)' }}>
             <span style={{ fontFamily:'var(--font-display)',fontWeight:700 }}>Total</span>
-            <span style={{ fontFamily:'var(--font-display)',fontWeight:700,color:'var(--color-green)',fontSize:'1.2rem' }}>{fmt(total)}</span>
+            <span style={{ fontFamily:'var(--font-display)',fontWeight:700,color:'var(--color-green)',fontSize:'1.2rem' }}>{fmtRound(total)}</span>
           </div>
         </div>
 
-        {/* Payment mode */}
+        {/* Payment methods — 2×2 grid */}
         <div style={{ marginBottom:'1rem' }}>
           <label style={lbl}>Payment method</label>
-          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8 }}>
-            {['cash','upi','pending'].map(m => (
-              <button key={m} onClick={()=>setPaymentMode(m)}
-                style={{ padding:'0.5rem',borderRadius:7,border:`1px solid ${paymentMode===m?'var(--color-green)':'var(--color-border)'}`,background:paymentMode===m?'var(--color-green-glow)':'transparent',color:paymentMode===m?'var(--color-green)':'var(--color-text2)',fontFamily:'var(--font-display)',fontWeight:600,fontSize:'0.82rem',cursor:'pointer',transition:'all 0.15s',textTransform:'capitalize' }}>
-                {m}
+          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:'0.6rem' }}>
+            {PAYMENT_MODES.map(m => (
+              <button key={m.id} onClick={()=>setPaymentMode(m.id)}
+                style={{ padding:'0.5rem',borderRadius:7,border:`1px solid ${paymentMode===m.id?'var(--color-green)':'var(--color-border)'}`,background:paymentMode===m.id?'var(--color-green-glow)':'transparent',color:paymentMode===m.id?'var(--color-green)':'var(--color-text2)',fontFamily:'var(--font-display)',fontWeight:600,fontSize:'0.8rem',cursor:'pointer',transition:'all 0.15s' }}>
+                {m.label}
               </button>
             ))}
           </div>
 
-          {/* UPI info box */}
-          {paymentMode === 'upi' && (
-            <div style={{ marginTop:'0.75rem',padding:'0.85rem',background:'rgba(59,130,246,0.06)',border:'1px solid rgba(59,130,246,0.2)',borderRadius:8 }}>
-              {upiId ? (
-                <div>
-                  <p style={{ fontSize:'0.82rem',color:'var(--color-blue)',marginBottom:'0.6rem' }}>
-                    📲 UPI ID: <strong>{upiId}</strong>
-                  </p>
-                  <div style={{ display:'flex',alignItems:'center',gap:'0.75rem' }}>
-                    {/* Show owner's uploaded QR if available, else show generated QR */}
-                    <img
-                      src={upiQrBase64 || `https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent('upi://pay?pa=' + upiId + '&am=' + total.toFixed(2) + '&tn=CueTrack&cu=INR')}`}
-                      alt="UPI QR"
-                      style={{ width:80,height:80,borderRadius:8,border:'1px solid var(--color-border)',objectFit:'cover',flexShrink:0,background:'#fff' }}
-                    />
-                    <div>
-                      <p style={{ fontSize:'0.78rem',color:'var(--color-text2)',lineHeight:1.5,marginBottom:3 }}>
-                        {upiQrBase64 ? 'Your uploaded QR — ' : 'Auto-generated UPI QR — '}
-                        customer can scan directly from this screen or get the link in WhatsApp.
-                      </p>
-                      <p style={{ fontSize:'0.7rem',color:'var(--color-green)',fontWeight:600 }}>
-                        ✓ QR link included in WhatsApp receipt automatically
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <p style={{ fontSize:'0.78rem',color:'var(--color-amber)' }}>
-                  ⚠ No UPI ID set. Add it in Settings → Payment & UPI.
+          {/* Split input */}
+          {paymentMode==='split' && (
+            <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,padding:'0.75rem',background:'rgba(59,130,246,0.06)',border:'1px solid rgba(59,130,246,0.2)',borderRadius:8 }}>
+              <div>
+                <label style={{ ...lbl,marginBottom:4 }}>Cash (₹)</label>
+                <input className="input-field" type="number" min="0" placeholder="0"
+                  value={cashAmt} onChange={e=>{setCashAmt(e.target.value);setUpiAmt(String(Math.max(0,total-parseFloat(e.target.value||0))))}}
+                  style={{ padding:'0.4rem 0.6rem',fontSize:'0.9rem' }} />
+              </div>
+              <div>
+                <label style={{ ...lbl,marginBottom:4 }}>UPI (₹)</label>
+                <input className="input-field" type="number" min="0" placeholder="0"
+                  value={upiAmt} onChange={e=>setUpiAmt(e.target.value)}
+                  style={{ padding:'0.4rem 0.6rem',fontSize:'0.9rem' }} />
+              </div>
+              <div style={{ gridColumn:'span 2',fontSize:'0.75rem',color:splitOk?'var(--color-green)':'var(--color-red)' }}>
+                {splitOk ? `✓ ${fmtRound(splitCash)} + ${fmtRound(splitUpi)} = ${fmtRound(total)}` : `Sum ${fmtRound(splitSum)} ≠ Total ${fmtRound(total)}`}
+              </div>
+            </div>
+          )}
+
+          {/* Paid + pending input */}
+          {paymentMode==='paid_pending' && (
+            <div style={{ padding:'0.75rem',background:'rgba(245,158,11,0.06)',border:'1px solid rgba(245,158,11,0.2)',borderRadius:8 }}>
+              <label style={{ ...lbl,marginBottom:4 }}>Amount paid now (₹)</label>
+              <input className="input-field" type="number" min="0" max={total} placeholder="0"
+                value={cashAmt} onChange={e=>setCashAmt(e.target.value)}
+                style={{ padding:'0.4rem 0.6rem',fontSize:'0.9rem' }} />
+              <p style={{ fontSize:'0.75rem',color:'var(--color-amber)',marginTop:4 }}>
+                Pending: {fmtRound(pendingAmt)}
+              </p>
+            </div>
+          )}
+
+          {/* UPI QR */}
+          {(paymentMode==='upi'||paymentMode==='split') && upiId && (
+            <div style={{ marginTop:'0.75rem',padding:'0.75rem',background:'rgba(59,130,246,0.06)',border:'1px solid rgba(59,130,246,0.2)',borderRadius:8,display:'flex',alignItems:'center',gap:'0.75rem' }}>
+              <img src={upiQrBase64||`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent('upi://pay?pa='+upiId+'&am='+(paymentMode==='split'?splitUpi:total)+'&tn=CueTrack&cu=INR')}`}
+                alt="UPI QR" style={{ width:70,height:70,borderRadius:8,border:'1px solid var(--color-border)',flexShrink:0,background:'#fff' }} />
+              <div>
+                <p style={{ fontSize:'0.8rem',color:'var(--color-blue)',fontWeight:600 }}>UPI ID: {upiId}</p>
+                <p style={{ fontSize:'0.72rem',color:'var(--color-text3)',marginTop:3 }}>
+                  {paymentMode==='split' ? `UPI amount: ${fmtRound(splitUpi)}` : `Amount: ${fmtRound(total)}`}
                 </p>
-              )}
+                <p style={{ fontSize:'0.7rem',color:'var(--color-green)',marginTop:2 }}>✓ QR link in WhatsApp receipt</p>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Discount — PIN protected */}
+        <div style={{ marginBottom:'1rem' }}>
+          {!showDiscount ? (
+            <button type="button" onClick={()=>setShowDiscount(true)}
+              style={{ fontSize:'0.78rem',color:'var(--color-text3)',background:'none',border:'none',cursor:'pointer',textDecoration:'underline' }}>
+              + Apply discount
+            </button>
+          ) : !pinUnlocked ? (
+            <div style={{ display:'flex',gap:'0.5rem',alignItems:'center' }}>
+              <input className="input-field" type="password" placeholder="Enter PIN to unlock discount"
+                value={discountPin} onChange={e=>setDiscountPin(e.target.value)}
+                onKeyDown={e=>e.key==='Enter'&&verifyPin()}
+                style={{ padding:'0.4rem 0.7rem',fontSize:'0.875rem' }} />
+              <button onClick={verifyPin} className="btn-ghost" style={{ padding:'0.4rem 0.75rem',fontSize:'0.82rem',flexShrink:0 }}>Unlock</button>
+              {pinError && <span style={{ fontSize:'0.75rem',color:'var(--color-red)' }}>Wrong PIN</span>}
+            </div>
+          ) : (
+            <div style={{ display:'flex',gap:'0.5rem',alignItems:'center' }}>
+              <span style={{ fontSize:'0.82rem',color:'var(--color-text2)' }}>Discount (₹):</span>
+              <input className="input-field" type="number" min="0" max={subtotal} placeholder="0"
+                value={discountAmt||''} onChange={e=>setDiscountAmt(parseFloat(e.target.value)||0)}
+                style={{ width:90,padding:'0.4rem 0.6rem',fontSize:'0.9rem' }} />
+              <button onClick={()=>{setShowDiscount(false);setPinUnlocked(false);setDiscountAmt(0)}}
+                style={{ fontSize:'0.78rem',color:'var(--color-text3)',background:'none',border:'none',cursor:'pointer' }}>✕</button>
             </div>
           )}
         </div>
@@ -378,8 +441,8 @@ function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, onClose, onC
         {/* WhatsApp note */}
         {table.customer?.phone && (
           <div style={{ marginBottom:'1rem',padding:'0.6rem 0.85rem',background:'rgba(37,211,102,0.06)',border:'1px solid rgba(37,211,102,0.15)',borderRadius:8 }}>
-            <p style={{ fontSize:'0.78rem',color:'#25d366',lineHeight:1.5 }}>
-              📱 WhatsApp opens with bill pre-filled. Just press <strong>Enter / Send</strong> once it opens.
+            <p style={{ fontSize:'0.78rem',color:'#25d366' }}>
+              📱 Receipt sent to {table.customer.phone} — just press <strong>Send</strong> once WhatsApp opens.
             </p>
           </div>
         )}
@@ -388,18 +451,18 @@ function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, onClose, onC
         <div style={{ display:'flex',gap:'0.6rem' }}>
           <button onClick={onClose} className="btn-ghost" style={{ flex:1,justifyContent:'center' }}>Cancel</button>
           {table.customer?.phone && (
-            <button onClick={sendWhatsApp} disabled={!!sending}
-              style={{ flex:1,padding:'0.65rem',borderRadius:8,border:'1px solid rgba(37,211,102,0.4)',background:'rgba(37,211,102,0.08)',color:'#25d366',fontFamily:'var(--font-display)',fontWeight:600,fontSize:'0.85rem',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'0.3rem',opacity:sending?0.7:1 }}>
-              {sendBtnLabel}
+            <button onClick={sendWhatsAppOnly} disabled={!!sending}
+              style={{ flex:1,padding:'0.65rem',borderRadius:8,border:'1px solid rgba(37,211,102,0.4)',background:'rgba(37,211,102,0.08)',color:'#25d366',fontFamily:'var(--font-display)',fontWeight:600,fontSize:'0.82rem',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',gap:'0.3rem' }}>
+              {sending?'Opening...':'📲 Preview receipt'}
             </button>
           )}
-          <button onClick={() => onConfirm(paymentMode, total)} className="btn-primary" style={{ flex:1,justifyContent:'center' }}>
+          <button onClick={handleConfirm} disabled={!splitOk} className="btn-primary" style={{ flex:1,justifyContent:'center',opacity:splitOk?1:0.5 }}>
             Confirm ✓
           </button>
         </div>
         {!table.customer?.phone && (
           <p style={{ fontSize:'0.72rem',color:'var(--color-text3)',textAlign:'center',marginTop:'0.5rem' }}>
-            No phone number saved — WhatsApp receipt not available for this session.
+            No phone — WhatsApp receipt unavailable.
           </p>
         )}
       </div>
@@ -416,11 +479,11 @@ function BillRow({ label, value, muted }) {
   )
 }
 
-// ── Table card ───────────────────────────────────────────────────
-function TableCard({ table, onStart, onPause, onResume, onEnd, onAddCanteen }) {
-  const cost = table.elapsed * table.ratePerMin / 60
-  const canteenTotal = table.canteen.reduce((s,i)=>s+i.price,0)
-  const sc = { available:'var(--color-green)', running:'var(--color-amber)', paused:'var(--color-blue)' }
+// ── Table card ────────────────────────────────────────────────────
+function TableCard({ table, onStart, onEditCustomer, onPause, onResume, onEnd, onAddCanteen, onRemoveCanteen }) {
+  const cost         = table.elapsed * table.ratePerMin / 60
+  const canteenTotal = table.canteen.reduce((s,i)=>s+i.price, 0)
+  const sc  = { available:'var(--color-green)', running:'var(--color-amber)', paused:'var(--color-blue)' }
   const cls = { available:'table-available', running:'table-running running-border', paused:'table-paused' }
 
   return (
@@ -441,9 +504,20 @@ function TableCard({ table, onStart, onPause, onResume, onEnd, onAddCanteen }) {
         </div>
       </div>
 
-      {table.customer?.name && (
-        <div style={{ fontSize:'0.78rem',color:'var(--color-text3)',marginBottom:'0.5rem' }}>
-          👤 {table.customer.name}{table.customer.phone?` · ${table.customer.phone}`:''}
+      {/* Customer info + edit button */}
+      {table.status !== 'available' && (
+        <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.5rem' }}>
+          <div style={{ fontSize:'0.78rem',color:'var(--color-text3)' }}>
+            {table.customer?.name
+              ? `👤 ${table.customer.name}${table.customer.phone?` · ${table.customer.phone}`:''}`
+              : '👤 No customer details'}
+          </div>
+          <button onClick={()=>onEditCustomer(table.id)}
+            style={{ fontSize:'0.7rem',color:'var(--color-text3)',background:'none',border:'1px solid var(--color-border)',borderRadius:5,padding:'2px 6px',cursor:'pointer',transition:'all 0.15s' }}
+            onMouseEnter={e=>e.target.style.color='var(--color-text)'}
+            onMouseLeave={e=>e.target.style.color='var(--color-text3)'}>
+            Edit
+          </button>
         </div>
       )}
 
@@ -452,29 +526,38 @@ function TableCard({ table, onStart, onPause, onResume, onEnd, onAddCanteen }) {
       </div>
 
       <div style={{ fontSize:'0.95rem',fontFamily:'var(--font-display)',fontWeight:600,color:table.status==='available'?'var(--color-text3)':'var(--color-amber)',marginBottom:'0.25rem' }}>
-        {table.status === 'available'
+        {table.status==='available'
           ? `₹${Math.round(table.ratePerMin*60)}/hr`
-          : `${fmt(cost+canteenTotal)}${canteenTotal>0?` (incl. ₹${canteenTotal.toFixed(0)} canteen)`:''}`}
+          : `${fmtRound(cost+canteenTotal)}${canteenTotal>0?` (incl. ₹${Math.round(canteenTotal)} canteen)`:''}`}
       </div>
 
-      {table.canteen.length > 0 && (
-        <div style={{ display:'flex',flexWrap:'wrap',gap:4,marginBottom:'0.6rem' }}>
-          {table.canteen.map((item,i) => <span key={i} className="tag tag-amber" style={{ fontSize:'0.68rem' }}>{item.name}</span>)}
+      {/* Canteen items with delete button */}
+      {table.canteen.length>0 && (
+        <div style={{ marginBottom:'0.6rem' }}>
+          {table.canteen.map((item,i) => (
+            <div key={i} style={{ display:'inline-flex',alignItems:'center',gap:3,marginRight:4,marginBottom:4 }}>
+              <span className="tag tag-amber" style={{ fontSize:'0.68rem' }}>{item.name}</span>
+              <button onClick={()=>onRemoveCanteen(table.id,i)}
+                style={{ width:14,height:14,borderRadius:'50%',background:'rgba(239,68,68,0.2)',border:'none',color:'var(--color-red)',cursor:'pointer',fontSize:'0.6rem',display:'flex',alignItems:'center',justifyContent:'center',lineHeight:1,padding:0 }}>
+                ✕
+              </button>
+            </div>
+          ))}
         </div>
       )}
 
       <div style={{ display:'flex',gap:'0.4rem',marginTop:'0.75rem' }}>
-        {table.status === 'available' && (
+        {table.status==='available' && (
           <button onClick={()=>onStart(table.id)} className="btn-primary" style={{ flex:1,justifyContent:'center',padding:'0.5rem',fontSize:'0.85rem' }}>▶ Start</button>
         )}
-        {table.status === 'running' && (
+        {table.status==='running' && (
           <>
             <button onClick={()=>onPause(table.id)} className="btn-ghost" style={{ flex:1,justifyContent:'center',padding:'0.5rem',fontSize:'0.85rem' }}>⏸ Pause</button>
             <button onClick={()=>onAddCanteen(table.id)} className="btn-ghost" style={{ flex:'none',padding:'0.5rem 0.7rem',fontSize:'0.85rem' }}>🍟</button>
             <button onClick={()=>onEnd(table.id)} style={{ flex:1,padding:'0.5rem',borderRadius:8,border:'1px solid rgba(239,68,68,0.4)',background:'rgba(239,68,68,0.08)',color:'var(--color-red)',fontFamily:'var(--font-display)',fontWeight:600,fontSize:'0.85rem',cursor:'pointer' }}>■ End</button>
           </>
         )}
-        {table.status === 'paused' && (
+        {table.status==='paused' && (
           <>
             <button onClick={()=>onResume(table.id)} className="btn-primary" style={{ flex:1,justifyContent:'center',padding:'0.5rem',fontSize:'0.85rem' }}>▶ Resume</button>
             <button onClick={()=>onAddCanteen(table.id)} className="btn-ghost" style={{ flex:'none',padding:'0.5rem 0.7rem',fontSize:'0.85rem' }}>🍟</button>
@@ -488,95 +571,147 @@ function TableCard({ table, onStart, onPause, onResume, onEnd, onAddCanteen }) {
 
 const lbl = { fontSize:'0.82rem',color:'var(--color-text2)',marginBottom:5,display:'block' }
 
-// ── Main Tables page ─────────────────────────────────────────────
+// ── Main Tables page ──────────────────────────────────────────────
 export default function Tables() {
   const { settings } = useClubSettings()
-  const { tables, loading, startTable, pauseTable, resumeTable, addCanteenItems, checkoutTable } = useTables(settings.tables)
+  const {
+    tables, loading,
+    startTable, pauseTable, resumeTable,
+    addCanteenItems, removeCanteenItem, updateCustomer,
+    checkoutTable,
+  } = useTables(settings.tables)
 
   const [startTarget,    setStartTarget]    = useState(null)
+  const [editCustomerId, setEditCustomerId] = useState(null)
   const [checkoutTarget, setCheckoutTarget] = useState(null)
   const [canteenTarget,  setCanteenTarget]  = useState(null)
+  // Feature 8: standalone canteen sale (null = for table, 'standalone' = no table)
+  const [standaloneCanteen, setStandaloneCanteen] = useState(false)
   const [tick, setTick] = useState(0)
 
   useEffect(() => {
-    const interval = setInterval(() => setTick(t => t+1), 1000)
-    return () => clearInterval(interval)
+    const iv = setInterval(() => setTick(t=>t+1), 1000)
+    return () => clearInterval(iv)
   }, [])
 
   const liveTables = tables.map(t => {
-    if (t.status === 'running' && t.startTime) {
-      return { ...t, elapsed: t.elapsed + Math.floor((Date.now() - t.startTime) / 1000) }
+    if (t.status==='running' && t.startTime) {
+      return { ...t, elapsed: t.elapsed + Math.floor((Date.now()-t.startTime)/1000) }
     }
     return t
   })
 
-  async function handleConfirmStart(tableId, customer) {
-    await startTable(tableId, customer)
+  async function handleConfirmStart(tableId, customer, lateMinutes) {
+    await startTable(tableId, customer, lateMinutes)
     setStartTarget(null)
   }
 
-  async function handleConfirmCheckout(paymentMode, total) {
-    await checkoutTable(checkoutTarget, paymentMode, total)
-    setCheckoutTarget(null)
+  async function handleEditCustomer(tableId, customer) {
+    await updateCustomer(tableId, customer)
+    setEditCustomerId(null)
+  }
+
+  async function handlePause(tableId) {
+    const t = liveTables.find(t=>t.id===tableId)
+    await pauseTable(tableId, t.elapsed)
   }
 
   async function handleAddCanteen(tableId, items) {
-    const t = liveTables.find(t => t.id === tableId)
+    const t = liveTables.find(t=>t.id===tableId)
     await addCanteenItems(tableId, t.canteen, items)
     setCanteenTarget(null)
   }
 
-  async function handlePause(tableId) {
-    const t = liveTables.find(t => t.id === tableId)
-    await pauseTable(tableId, t.elapsed)
+  async function handleRemoveCanteen(tableId, index) {
+    const t = liveTables.find(t=>t.id===tableId)
+    await removeCanteenItem(tableId, t.canteen, index)
+  }
+
+  async function handleConfirmCheckout(billData) {
+    const billNo = await checkoutTable(checkoutTarget, billData)
+    setCheckoutTarget(null)
+    return billNo
   }
 
   const stats = [
     { label:'Available', value:liveTables.filter(t=>t.status==='available').length, color:'var(--color-green)' },
     { label:'Running',   value:liveTables.filter(t=>t.status==='running').length,   color:'var(--color-amber)' },
     { label:'Paused',    value:liveTables.filter(t=>t.status==='paused').length,     color:'var(--color-blue)'  },
-    { label:'Earning now', value:'₹'+liveTables.reduce((s,t)=>s+(t.elapsed*t.ratePerMin/60)+t.canteen.reduce((c,i)=>c+i.price,0),0).toFixed(0), color:'var(--color-text)' },
+    { label:'Earning now', value:'₹'+Math.round(liveTables.reduce((s,t)=>s+(t.elapsed*t.ratePerMin/60)+t.canteen.reduce((c,i)=>c+i.price,0),0)), color:'var(--color-text)' },
   ]
 
   if (loading) return <div style={{ color:'var(--color-text3)',padding:'2rem',textAlign:'center' }}>Loading tables...</div>
 
   return (
     <div>
-      <div style={{ display:'flex',gap:'0.75rem',marginBottom:'1.5rem',flexWrap:'wrap' }}>
+      {/* Stats + standalone canteen button */}
+      <div style={{ display:'flex',gap:'0.75rem',marginBottom:'1.5rem',flexWrap:'wrap',alignItems:'center' }}>
         {stats.map(s => (
           <div key={s.label} className="card" style={{ padding:'0.85rem 1.25rem' }}>
             <div style={{ fontSize:'0.72rem',color:'var(--color-text3)' }}>{s.label}</div>
             <div style={{ fontFamily:'var(--font-display)',fontWeight:700,fontSize:'1.3rem',color:s.color,marginTop:2 }}>{s.value}</div>
           </div>
         ))}
+        {/* Feature 8: canteen sale without a table */}
+        <button onClick={()=>setStandaloneCanteen(true)} className="btn-ghost"
+          style={{ marginLeft:'auto',fontSize:'0.85rem',padding:'0.5rem 1rem',display:'flex',alignItems:'center',gap:'0.4rem' }}>
+          🍟 Canteen sale
+        </button>
       </div>
 
       <div style={{ display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(268px,1fr))',gap:'1rem' }}>
         {liveTables.map(table => (
           <TableCard key={table.id} table={table}
             onStart={setStartTarget}
+            onEditCustomer={setEditCustomerId}
             onPause={handlePause}
             onResume={resumeTable}
-            onEnd={(id) => setCheckoutTarget(liveTables.find(t=>t.id===id))}
+            onEnd={(id)=>setCheckoutTarget(liveTables.find(t=>t.id===id))}
             onAddCanteen={setCanteenTarget}
+            onRemoveCanteen={handleRemoveCanteen}
           />
         ))}
       </div>
 
+      {/* Modals */}
       {startTarget && (
-        <StartModal
+        <CustomerModal
           table={liveTables.find(t=>t.id===startTarget)}
-          onConfirm={(customer) => handleConfirmStart(startTarget, customer)}
-          onClose={() => setStartTarget(null)}
+          isEditing={false}
+          onConfirm={(customer, lateMinutes) => handleConfirmStart(startTarget, customer, lateMinutes)}
+          onClose={()=>setStartTarget(null)}
         />
       )}
+
+      {editCustomerId && (
+        <CustomerModal
+          table={liveTables.find(t=>t.id===editCustomerId)}
+          isEditing={true}
+          onConfirm={(customer) => handleEditCustomer(editCustomerId, customer)}
+          onClose={()=>setEditCustomerId(null)}
+        />
+      )}
+
       {canteenTarget && (
         <CanteenModal
           table={liveTables.find(t=>t.id===canteenTarget)}
-          onAdd={(items) => handleAddCanteen(canteenTarget, items)}
-          onClose={() => setCanteenTarget(null)}
+          onAdd={(items)=>handleAddCanteen(canteenTarget, items)}
+          onClose={()=>setCanteenTarget(null)}
         />
       )}
+
+      {standaloneCanteen && (
+        <CanteenModal
+          table={null}
+          onAdd={(items)=>{
+            // TODO: save standalone canteen bill to Firestore
+            alert(`Canteen sale: ${items.map(i=>i.name).join(', ')} — Total: ₹${Math.round(items.reduce((s,i)=>s+i.price,0))}`)
+            setStandaloneCanteen(false)
+          }}
+          onClose={()=>setStandaloneCanteen(false)}
+        />
+      )}
+
       {checkoutTarget && (
         <BillModal
           table={checkoutTarget}
@@ -584,7 +719,7 @@ export default function Tables() {
           upiQrBase64={settings.upiQrBase64}
           upiQrUrl={settings.upiQrUrl}
           clubName={settings.clubName}
-          onClose={() => setCheckoutTarget(null)}
+          onClose={()=>setCheckoutTarget(null)}
           onConfirm={handleConfirmCheckout}
         />
       )}

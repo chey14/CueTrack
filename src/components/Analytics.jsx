@@ -99,11 +99,19 @@ export default function Analytics() {
       payments[b.paymentMode] = (payments[b.paymentMode]||0)+b.total
     })
 
+    // Table vs canteen revenue split — today and this month
+    const todayTableRev   = todayBills.reduce((s,b)=>s+(b.tableCharge||0),0)
+    const todayCanteenRev = todayBills.reduce((s,b)=>s+(b.canteenTotal||0),0)
+    const monthBillsAll   = byMonth[thisMonthKey]||[]
+    const monthTableRev   = monthBillsAll.reduce((s,b)=>s+(b.tableCharge||0),0)
+    const monthCanteenRev = monthBillsAll.reduce((s,b)=>s+(b.canteenTotal||0),0)
+
     // Sorted date keys for history (newest first)
     const sortedDateKeys = Object.keys(byDate).sort((a,b)=>b.localeCompare(a))
 
     return {
       todayRevenue, todaySessions, todayChange, yesterdayRevenue,
+      todayTableRev, todayCanteenRev, monthTableRev, monthCanteenRev,
       last6, thisMonthRevenue, lastMonthRevenue, avgRevenue,
       projected: avgRevenue*12, pctChange,
       hourBuckets, tablePerf, payments, byDate, sortedDateKeys,
@@ -191,7 +199,7 @@ export default function Analytics() {
     )
   }
 
-  const { todayRevenue, todaySessions, todayChange, yesterdayRevenue, last6, thisMonthRevenue, lastMonthRevenue, avgRevenue, projected, pctChange, hourBuckets, tablePerf, payments, byDate, sortedDateKeys } = analytics
+  const { todayRevenue, todaySessions, todayChange, yesterdayRevenue, todayTableRev, todayCanteenRev, monthTableRev, monthCanteenRev, last6, thisMonthRevenue, lastMonthRevenue, avgRevenue, projected, pctChange, hourBuckets, tablePerf, payments, byDate, sortedDateKeys } = analytics
 
   const tabStyle = (t) => ({
     padding:'0.45rem 0.9rem',borderRadius:6,border:'none',cursor:'pointer',
@@ -248,6 +256,34 @@ export default function Analytics() {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Today: table vs canteen split */}
+          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.75rem' }}>
+            {[
+              { label:'Today — tables',  value:inr(Math.round(todayTableRev)),   color:'var(--color-green)', sub:'Table play revenue' },
+              { label:'Today — canteen', value:inr(Math.round(todayCanteenRev)), color:'var(--color-amber)', sub:'Food & drinks revenue' },
+            ].map(k => (
+              <div key={k.label} className="card" style={{ padding:'0.95rem 1.1rem' }}>
+                <div style={{ fontSize:'0.75rem',color:'var(--color-text3)',marginBottom:3 }}>{k.label}</div>
+                <div style={{ fontFamily:'var(--font-display)',fontWeight:700,fontSize:'1.15rem',color:k.color,marginBottom:2 }}>{k.value}</div>
+                <div style={{ fontSize:'0.72rem',color:'var(--color-text3)' }}>{k.sub}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* This month: table vs canteen split */}
+          <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.75rem' }}>
+            {[
+              { label:'This month — tables',  value:inr(Math.round(monthTableRev)),   color:'var(--color-green)', sub:'Table play revenue' },
+              { label:'This month — canteen', value:inr(Math.round(monthCanteenRev)), color:'var(--color-amber)', sub:'Food & drinks revenue' },
+            ].map(k => (
+              <div key={k.label} className="card" style={{ padding:'0.95rem 1.1rem' }}>
+                <div style={{ fontSize:'0.75rem',color:'var(--color-text3)',marginBottom:3 }}>{k.label}</div>
+                <div style={{ fontFamily:'var(--font-display)',fontWeight:700,fontSize:'1.15rem',color:k.color,marginBottom:2 }}>{k.value}</div>
+                <div style={{ fontSize:'0.72rem',color:'var(--color-text3)' }}>{k.sub}</div>
+              </div>
+            ))}
           </div>
 
           {/* Monthly KPIs */}
