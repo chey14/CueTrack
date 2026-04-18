@@ -438,16 +438,27 @@ export default function Analytics() {
                             </div>
                           )}
                           <div style={{ fontSize:'0.72rem',color:'var(--color-text3)',display:'flex',gap:'0.75rem',flexWrap:'wrap' }}>
-                            <span>In: {fmtT(checkIn)}</span>
-                            <span>Out: {fmtT(checkOut)}</span>
-                            <span>{Math.floor(b.elapsed/60)}m {b.elapsed%60}s</span>
-                            {b.canteenTotal>0 && <span>Canteen ₹{b.canteenTotal.toFixed(0)}</span>}
+                            {b.billType==='canteen' ? (
+                              <span style={{ color:'var(--color-amber)' }}>🍟 Canteen sale</span>
+                            ) : (
+                              <>
+                                <span>In: {fmtT(checkIn)}</span>
+                                <span>Out: {fmtT(checkOut)}</span>
+                                <span>{Math.floor(b.elapsed/60)}m {b.elapsed%60}s</span>
+                              </>
+                            )}
+                            {b.canteenTotal>0 && b.billType!=='canteen' && <span>Canteen ₹{Math.round(b.canteenTotal)}</span>}
+                            {b.discount>0 && <span style={{ color:'var(--color-green)',fontWeight:600 }}>Discount -₹{Math.round(b.discount)}</span>}
                           </div>
                         </div>
                         <div style={{ display:'flex',alignItems:'center',gap:'0.6rem' }}>
-                          <span className={b.paymentMode==='cash'?'tag tag-green':b.paymentMode==='upi'?'tag tag-blue':'tag tag-red'}
-                            style={{ fontSize:'0.68rem',textTransform:'capitalize' }}>
-                            {b.paymentMode}
+                          <span className={
+                            b.paymentMode==='cash'         ? 'tag tag-green'  :
+                            b.paymentMode==='upi'          ? 'tag tag-blue'   :
+                            b.paymentMode==='split'        ? 'tag tag-blue'   :
+                            b.paymentMode==='paid_pending' ? 'tag tag-amber'  : 'tag tag-red'
+                          } style={{ fontSize:'0.68rem' }}>
+                            {b.paymentMode==='split'?'UPI+Cash':b.paymentMode==='paid_pending'?'Part paid':b.paymentMode}
                           </span>
                           <span style={{ fontFamily:'var(--font-display)',fontWeight:700,color:'var(--color-green)',fontSize:'0.95rem' }}>
                             {inr(b.total)}
