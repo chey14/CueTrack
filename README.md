@@ -219,63 +219,6 @@ cuetrack/
 
 ---
 
-## Getting Started
-
-### Prerequisites
-
-- Node.js 18+
-- Firebase project (free Spark plan)
-
-### 1. Clone
-
-```bash
-git clone https://github.com/YOUR_USERNAME/cuetrack.git
-cd cuetrack
-npm install
-```
-
-### 2. Environment variables
-
-```bash
-cp .env.example .env
-```
-
-Edit `.env`:
-
-```env
-VITE_FIREBASE_API_KEY=your_api_key
-VITE_FIREBASE_AUTH_DOMAIN=your_project.firebaseapp.com
-VITE_FIREBASE_PROJECT_ID=your_project_id
-VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
-VITE_FIREBASE_APP_ID=your_app_id
-```
-
-Get these from: Firebase Console → Project Settings → Your apps → Config.
-
-### 3. Firebase setup (free)
-
-In Firebase Console, enable:
-- **Firestore Database** → Create → Start in test mode
-- **Authentication** → Email/Password → Enable
-
-### 4. Run locally
-
-```bash
-npm run dev
-# Open http://localhost:5173
-```
-
-### 5. Deploy
-
-```bash
-# Push to GitHub — Vercel auto-deploys
-git add . && git commit -m "deploy" && git push origin main
-```
-
-After first Vercel deploy: Firebase Console → Authentication → Settings → Authorized domains → add your Vercel domain.
-
----
-
 ## Owner Onboarding Flow
 
 CueTrack uses gated access — no public sign-up.
@@ -301,38 +244,6 @@ CueTrack uses gated access — no public sign-up.
 | + 1 more | Vellore area | — | ~100 |
 
 **Total: 4+ clubs · 400+ daily visitors · ₹0/month infrastructure cost**
-
----
-
-## Roadmap
-
-### Completed ✅
-- Live table dashboard with real-time timers
-- Auto billing (per-minute and per-hour rates)
-- Canteen add-ons per session with delete
-- 4 payment modes: Cash / UPI / Split / Paid+Pending
-- WhatsApp bill receipts with UPI QR link
-- Standalone canteen sales with full checkout
-- PIN-protected discounts and inventory management
-- Offline-first PWA (works during power cuts)
-- Firebase Firestore real-time persistence
-- Sequential bill numbers (never resets)
-- Check-in / check-out time on every bill
-- Late check-in (charges extra, invisible on bill)
-- Revenue analytics — today, monthly, 6-month trend
-- Table vs canteen revenue split
-- Peak hour heatmap
-- Bill history grouped by date with CSV export
-- Customer live view via club QR code
-- Gated owner onboarding via WhatsApp verification
-- Owner PIN for discounts and inventory
-
-### Planned 📋
-- Member / credit tracking (Khatabook style)
-- Table bookings and advance reservations
-- Automated daily WhatsApp summary (requires WhatsApp Business API)
-- Multi-staff roles with granular permissions
-- Subscription tier after proving value at scale
 
 ---
 
