@@ -1,59 +1,174 @@
 # CueTrack 🎱
 
-> Snooker & pool club management software — built for local Indian clubs that still use notebooks.
+**Smart snooker & pool club management — built for local Indian clubs.**
 
-[![Live Demo](https://img.shields.io/badge/live-cuetrack.vercel.app-brightgreen)](https://cuetrack.vercel.app)
-[![React](https://img.shields.io/badge/React-18-blue)](https://react.dev)
-[![Firebase](https://img.shields.io/badge/Firebase-Firestore-orange)](https://firebase.google.com)
-[![License](https://img.shields.io/badge/license-MIT-lightgrey)](LICENSE)
-
----
-
-## What is CueTrack?
-
-CueTrack is a free, offline-first Progressive Web App that replaces paper notebooks for snooker and pool club owners. It automates table timing, billing, canteen tracking, and revenue analytics — and works even without internet, so power cuts and network drops don't stop operations.
-
-**Built by a player, for owners.** Inspired by watching clubs near VIT Vellore manually calculate bills and lose revenue to timing errors every single day.
-
-Currently used by **Cues and Cushions Cafe**, **The House of Pool**, and **The OX Snooker** in Vellore.
+[![Live](https://img.shields.io/badge/live-cuetrack.vercel.app-22c55e?style=flat-square)](https://cuetrack.vercel.app)
+[![React](https://img.shields.io/badge/React-18-61dafb?style=flat-square&logo=react)](https://react.dev)
+[![Firebase](https://img.shields.io/badge/Firebase-Firestore-f59e0b?style=flat-square&logo=firebase)](https://firebase.google.com)
+[![PWA](https://img.shields.io/badge/PWA-offline--first-7c3aed?style=flat-square)](https://web.dev/progressive-web-apps/)
+[![License](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)](LICENSE)
 
 ---
 
-## Features
+## Overview
 
-### Core
+CueTrack is a free, production-deployed club management SaaS adopted by **4+ snooker and pool clubs near VIT Vellore**, serving over **400 daily visitors** across Cues and Cushions Cafe, The House of Pool, and The OX Snooker.
+
+It replaces paper notebooks with a real-time digital dashboard — automating table billing, canteen tracking, revenue analytics, and customer receipts. Built offline-first so power cuts and internet drops never interrupt operations.
+
+> *Built by a player who watched club owners lose revenue to manual errors every day. Identified the problem firsthand, interviewed real owners, and shipped a working product used by real businesses.*
+
+---
+
+## Live Deployment
+
+| URL | Description |
+|---|---|
+| `cuetrack.vercel.app` | Owner dashboard & landing page |
+| `cuetrack.vercel.app/club/:uid` | Customer live view (scan club QR) |
+| `cuetrack.vercel.app/login` | Owner login & access request |
+
+---
+
+## Feature Set
+
+### Core Operations
 | Feature | Description |
 |---|---|
-| Live table dashboard | Real-time timers per table, color-coded by status (available / running / paused) |
-| Auto billing | Session cost calculated from `startTime` delta — zero manual arithmetic |
-| Canteen integration | Add food & drinks to any running session, merged into the final bill |
-| WhatsApp receipt | Itemised bill sent to customer's WhatsApp on checkout, one tap |
-| UPI payment QR | Auto-generates a scannable UPI deep-link QR with bill amount pre-filled |
-| Offline-first PWA | Works during power cuts — Firestore IndexedDB persistence, auto-sync on reconnect |
+| **Live table dashboard** | All tables on one screen — green = available, amber = running, blue = paused. Real-time cost updates every second |
+| **Auto billing** | Session cost computed from `startTime` delta, not per-second writes. Zero manual calculation |
+| **Canteen add-ons** | Link food & drinks to any running session. Merged into final bill automatically |
+| **Customer details** | Optional name + WhatsApp per session. Editable mid-session via "Edit" button on table card |
+| **Late check-in** | Record late arrivals — extra time is charged silently without appearing on the customer bill |
+| **Canteen delete** | Remove a wrongly added item from a running session before checkout |
 
-### Owner dashboard
+### Billing & Payments
 | Feature | Description |
 |---|---|
-| Revenue analytics | Today vs yesterday, monthly chart, 6-month trend, annual forecast |
-| Peak hour heatmap | Visualises which hours generate the most revenue |
-| Table performance | Per-table revenue and session count for the current month |
-| Bill history | All transactions grouped by date (Today / Yesterday / older dates) |
-| Payment breakdown | Cash vs UPI vs pending totals per month |
-| Daily WhatsApp summary | One-tap send of daily revenue report to owner's WhatsApp |
+| **4 payment modes** | Cash / UPI / UPI + Cash (split) / Paid + Pending |
+| **Split payment** | Enter cash and UPI amounts — validates they sum to total before confirming |
+| **Paid + Pending** | Record partial payment; pending amount tracked separately |
+| **PIN-protected discount** | Owner sets a private PIN in Settings; only PIN-holders can apply discounts |
+| **Sequential bill numbers** | Format: `CT-YYYYMMDD-001`, globally sequential — never resets, never repeats |
+| **Check-in / check-out times** | Shown on every bill and in transaction history |
+| **Rounded amounts** | All bills display to nearest rupee — no decimal confusion |
 
-### Customer view
+### WhatsApp Integration
 | Feature | Description |
 |---|---|
-| Club live view | Public page at `/club/:uid` — customers scan club QR and see all tables live |
-| Read-only | Customers see timers and running costs but cannot control anything |
-| No login required | Works on any phone, no app download needed |
+| **Bill receipt** | Itemised bill sent to customer's WhatsApp on checkout — includes club name, table, time, canteen, total |
+| **UPI QR link** | Auto-generates a scannable UPI deep-link QR with the exact bill amount pre-filled |
+| **Canteen receipt** | Standalone canteen sales also send WhatsApp receipts with optional customer name |
+| **Daily summary** | Owner taps one button — yesterday's revenue, sessions, and top table sent to their WhatsApp |
 
-### Access control
+### Standalone Canteen Sales
 | Feature | Description |
 |---|---|
-| Verified onboarding | New owners submit a WhatsApp request form — credentials shared only after manual verification |
-| Owner-only login | No public registration — prevents unauthorised access |
-| Role separation | Staff can operate tables, owners see financials and settings |
+| **No-table billing** | Sell canteen items to walk-in customers without starting a table session |
+| **Full checkout** | Same 4 payment modes, discount, customer name, WhatsApp receipt as table checkout |
+| **Saved to history** | Appears in bill history tagged as "Canteen sale" — included in all revenue analytics |
+
+### Analytics & Reporting
+| Feature | Description |
+|---|---|
+| **Today's revenue** | Live card showing today vs yesterday with % change |
+| **Table vs canteen split** | Today and this month broken down by table revenue and canteen revenue separately |
+| **Monthly trend chart** | Last 6 months bar chart with current month highlighted |
+| **Monthly KPIs** | This month / last month / 6-month average / projected annual revenue |
+| **Peak hour heatmap** | All-time revenue by hour of day — shows busiest periods |
+| **Table performance** | Per-table revenue and session count for current month |
+| **Payment breakdown** | Cash vs UPI vs pending totals per month |
+| **Bill history** | All transactions grouped by date (Today / Yesterday / older). Filter by payment mode |
+| **Discount tracking** | Discounted bills shown with discount amount in history |
+| **CSV export** | Full transaction history exported with: Bill No, Date, Check-in, Check-out, Duration, Table, Rate, Charges, Canteen, Discount, Total, Payment, Customer |
+
+### Canteen & Inventory
+| Feature | Description |
+|---|---|
+| **Menu management** | Add / edit / delete canteen items with name, price, category |
+| **Stock tracking** | Each item has a stock quantity visible on the menu card |
+| **PIN-protected inventory** | "Restock inventory" requires owner PIN — staff cannot manipulate stock numbers |
+| **Bulk restock panel** | One click to unlock all items for simultaneous restocking |
+| **Per-item stock edit** | Individual PIN unlock per item for single-item corrections |
+| **Stock alerts** | Items show amber (low: ≤3) or red (out of stock) status |
+| **Inventory value** | Total current inventory value shown in stats |
+
+### Access Control & Onboarding
+| Feature | Description |
+|---|---|
+| **Gated registration** | No public sign-up. New owners submit a WhatsApp request form with club details |
+| **Manual verification** | Owner reviews each request, verifies legitimacy, creates account via Firebase Console |
+| **Owner PIN** | Separate PIN (stored device-local) for sensitive actions: discounts and inventory edits |
+| **Staff vs owner** | Staff can operate tables and billing. Owner controls settings, analytics, inventory |
+
+### Customer View (QR)
+| Feature | Description |
+|---|---|
+| **Unique club URL** | Each club gets `/club/:uid` — permanent, based on Firebase UID, never changes |
+| **QR code generated** | Settings page generates a printable QR and download link automatically |
+| **Live table status** | Customers see all tables: available, running, or paused |
+| **Live timer & cost** | Running tables show live countdown and current total cost |
+| **Read-only** | No buttons — customers can only view, not control anything |
+| **No login required** | Works on any phone browser, no app download |
+
+### Offline & Reliability
+| Feature | Description |
+|---|---|
+| **Offline-first PWA** | Firestore IndexedDB persistence — app works during power cuts and internet drops |
+| **Auto-sync** | All offline writes queue and sync automatically when connection returns |
+| **Installable** | Can be installed as a PWA on any phone or tablet (Add to Home Screen) |
+| **Refresh-safe routing** | `vercel.json` SPA config — no 404 on page refresh or direct URL access |
+
+---
+
+## Architecture
+
+### Why these technical decisions matter
+
+**`startTime` delta billing — not per-second writes**
+Timers store a `startTime` timestamp and compute elapsed locally as `Date.now() - startTime`. This means one Firestore write on start instead of one every second — reducing daily writes by ~99% and keeping the entire platform within Firebase's free tier at scale across multiple clubs.
+
+**Multi-tenant Firestore schema**
+All data lives under `clubs/{uid}/` — each owner's tables, bills, and settings are fully isolated. New clubs onboard in under 15 minutes with zero manual database configuration.
+
+**Base64 QR in Firestore instead of Firebase Storage**
+UPI QR images are resized to ≤500px and stored as base64 strings in Firestore. Eliminates Firebase Storage (which requires the paid Blaze plan) — the entire platform runs on the free Spark plan.
+
+**Sequential bill numbers via atomic Firestore transaction**
+`runTransaction` ensures two simultaneous checkouts never receive the same bill number. Counter never resets — bill `CT-20260417-041` is always followed by `-042`.
+
+**Device-local owner PIN**
+The owner PIN is stored in `localStorage` (not Firestore) — it never leaves the device, cannot be read by staff on other devices, and doesn't appear in any database. Correctly scoped for its purpose.
+
+### Data structure
+
+```
+Firestore
+└── clubs/
+    └── {uid}/                         ← owner's Firebase Auth UID
+        ├── settings/
+        │   ├── main                   ← clubName, upiId, upiQrBase64, tables[], ownerWhatsapp
+        │   └── billCounter            ← { count: 41 }  (atomic sequential counter)
+        ├── tables/
+        │   ├── {tableId}              ← status, startTime, elapsed, canteen[], customer, lateMinutes
+        │   └── ...
+        └── bills/
+            ├── {autoId}               ← billType, billNumber, tableCharge, canteenTotal,
+            │                             discount, total, paymentMode, cashAmount, upiAmount,
+            │                             pendingAmount, customer, checkInTime, checkOutTime,
+            │                             elapsed, createdAt
+            └── ...
+```
+
+### Infrastructure cost: ₹0/month
+
+| Service | Usage | Cost |
+|---|---|---|
+| Firebase Firestore | Tables, bills, settings | Free (Spark) |
+| Firebase Auth | Owner login | Free (Spark) |
+| Vercel | Frontend hosting | Free |
+| api.qrserver.com | QR code generation | Free |
+| api.whatsapp.com | Bill receipts (wa.me links) | Free |
 
 ---
 
@@ -61,93 +176,71 @@ Currently used by **Cues and Cushions Cafe**, **The House of Pool**, and **The O
 
 | Layer | Technology |
 |---|---|
-| Frontend | React 18, Vite, Tailwind CSS v4 |
-| Database | Firebase Firestore (real-time, offline persistence via IndexedDB) |
+| Frontend | React 18 · Vite · Tailwind CSS v4 |
+| Database | Firebase Firestore (real-time + offline IndexedDB) |
 | Auth | Firebase Authentication (email/password) |
-| Hosting | Vercel (auto-deploys on every push to `main`) |
-| QR generation | api.qrserver.com (free, no account) |
-| Fonts | Syne (display) + DM Sans (body) |
-
-**Infrastructure cost: ₹0/month.** Engineered entirely within Firebase's free Spark plan — no paid services required.
+| Hosting | Vercel (auto-deploys on `git push`) |
+| Fonts | Plus Jakarta Sans · Inter |
 
 ---
 
-## Architecture decisions
-
-**`startTime` delta billing instead of per-second writes**
-Timers store a `startTime` timestamp and compute elapsed time locally (`Date.now() - startTime`). This means one Firestore write on start instead of one write every second — reducing daily writes by ~99% and staying well within the free tier at scale.
-
-**Multi-tenant Firestore schema**
-Each owner's data lives under `clubs/{uid}/` — fully isolated per account, zero cross-contamination, and new clubs onboard in minutes with no manual database setup.
-
-**base64 QR in Firestore instead of Firebase Storage**
-UPI QR images are compressed to ≤400px and stored as base64 strings in Firestore. Eliminates the need for Firebase Storage (which requires the paid Blaze plan) while keeping images available offline.
-
-**Offline-first with IndexedDB persistence**
-`enableIndexedDbPersistence()` mirrors all Firestore data locally. If the internet drops mid-session, the timer keeps running and all writes queue up — they sync the moment connectivity returns. Critical for Indian clubs where power cuts are a daily reality.
-
----
-
-## Project structure
+## Project Structure
 
 ```
 cuetrack/
+├── public/
+│   └── manifest.json              # PWA manifest
 ├── src/
 │   ├── pages/
-│   │   ├── Landing.jsx       # Public marketing site (7 sections)
-│   │   ├── Login.jsx         # Owner login + access request form
-│   │   ├── Dashboard.jsx     # App shell — sidebar + navigation
-│   │   └── ClubView.jsx      # Customer-facing live table view (/club/:uid)
+│   │   ├── Landing.jsx            # Public marketing site (7 sections)
+│   │   ├── Login.jsx              # Owner login + access request form
+│   │   ├── Dashboard.jsx          # App shell — sidebar navigation
+│   │   └── ClubView.jsx           # Customer live view (/club/:uid)
 │   ├── components/
-│   │   ├── Tables.jsx        # Live table cards, billing modal, canteen modal
-│   │   ├── Analytics.jsx     # Revenue charts, peak hours, bill history
-│   │   ├── Canteen.jsx       # Menu management with stock tracking
-│   │   └── Settings.jsx      # Club config, UPI setup, club QR code
+│   │   ├── Tables.jsx             # Live table cards, billing, canteen, checkout
+│   │   ├── Analytics.jsx          # Revenue charts, history, CSV export
+│   │   ├── Canteen.jsx            # Menu + PIN-protected inventory
+│   │   └── Settings.jsx           # Club config, UPI, PIN, club QR
 │   ├── hooks/
-│   │   ├── useClubSettings.js  # Firestore settings read/write
-│   │   ├── useTables.js        # Live table state management
-│   │   └── useBills.js         # Transaction history from Firestore
+│   │   ├── useClubSettings.js     # Firestore settings read/write + QR upload
+│   │   ├── useTables.js           # Live table state, checkout, canteen bills
+│   │   └── useBills.js            # Transaction history from Firestore
 │   ├── context/
-│   │   └── AuthContext.jsx   # Global Firebase Auth state
-│   ├── firebase.js           # Firebase init + offline persistence
-│   ├── App.jsx               # Route definitions
-│   ├── main.jsx              # React entry point
-│   └── index.css             # Design system — dark theme, CSS variables
-├── public/
-│   └── manifest.json         # PWA manifest — makes app installable
-├── .env                      # Firebase config (not committed — see .env.example)
-├── .env.example              # Template for environment variables
-└── vite.config.js            # Vite + Tailwind config
+│   │   └── AuthContext.jsx        # Global Firebase Auth state
+│   ├── firebase.js                # Firebase init + offline persistence
+│   ├── App.jsx                    # Route definitions
+│   ├── main.jsx                   # React entry point
+│   └── index.css                  # Design system — dark theme, CSS variables
+├── vercel.json                    # SPA routing — prevents 404 on refresh
+├── .env                           # Firebase config (not committed)
+├── .env.example                   # Config template
+└── vite.config.js                 # Vite + Tailwind config
 ```
 
 ---
 
-## Getting started
+## Getting Started
 
 ### Prerequisites
-- Node.js 18+
-- A Firebase project (free Spark plan is sufficient)
 
-### 1. Clone the repo
+- Node.js 18+
+- Firebase project (free Spark plan)
+
+### 1. Clone
 
 ```bash
 git clone https://github.com/YOUR_USERNAME/cuetrack.git
 cd cuetrack
-```
-
-### 2. Install dependencies
-
-```bash
 npm install
 ```
 
-### 3. Set up environment variables
-
-Copy the example file and fill in your Firebase config:
+### 2. Environment variables
 
 ```bash
 cp .env.example .env
 ```
+
+Edit `.env`:
 
 ```env
 VITE_FIREBASE_API_KEY=your_api_key
@@ -157,73 +250,89 @@ VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
 VITE_FIREBASE_APP_ID=your_app_id
 ```
 
-Get these values from: Firebase Console → Project Settings → Your apps → Config.
+Get these from: Firebase Console → Project Settings → Your apps → Config.
 
-### 4. Enable Firebase services
+### 3. Firebase setup (free)
 
-In the Firebase Console:
-- **Firestore Database** → Create database → Start in test mode
-- **Authentication** → Get started → Email/Password → Enable
+In Firebase Console, enable:
+- **Firestore Database** → Create → Start in test mode
+- **Authentication** → Email/Password → Enable
 
-### 5. Run locally
+### 4. Run locally
 
 ```bash
 npm run dev
+# Open http://localhost:5173
 ```
 
-Open [http://localhost:5173](http://localhost:5173)
+### 5. Deploy
+
+```bash
+# Push to GitHub — Vercel auto-deploys
+git add . && git commit -m "deploy" && git push origin main
+```
+
+After first Vercel deploy: Firebase Console → Authentication → Settings → Authorized domains → add your Vercel domain.
 
 ---
 
-## Deployment
+## Owner Onboarding Flow
 
-This project is configured for zero-config deployment on Vercel.
+CueTrack uses gated access — no public sign-up.
 
-### Deploy to Vercel
+1. New owner visits the site and fills the **"Request access"** form (name, club, city, phone, number of tables)
+2. Form opens WhatsApp with their details pre-filled → sent to the admin number
+3. Admin verifies the club is legitimate
+4. Admin creates their account: Firebase Console → Authentication → Users → Add user
+5. Admin sends them their email + temporary password via WhatsApp
+6. Owner logs in → their club URL (`/club/:uid`) and QR code are auto-generated immediately
 
-1. Push your code to GitHub
-2. Go to [vercel.com](https://vercel.com) → Add New Project → Import your repo
-3. Add the same environment variables from your `.env` file in the Vercel dashboard
-4. Click Deploy — done
-
-After your first deploy, every `git push origin main` triggers an automatic redeploy.
-
-### After deploying
-
-Add your Vercel domain to Firebase's authorized domains:
-Firebase Console → Authentication → Settings → Authorized domains → Add domain
+**To set the PIN on a new device:** Settings → Owner PIN → Change PIN (default: `1234`)
 
 ---
 
-## Creating credentials for a new club owner
+## Clubs Using CueTrack
 
-CueTrack uses a gated onboarding flow — owners cannot self-register. When a new owner submits the access request form on the website, you receive a WhatsApp message with their details. After verifying they're a legitimate club:
+| Club | Location | Tables | Daily Visitors |
+|---|---|---|---|
+| Cues and Cushions Cafe | Vellore | — | ~100 |
+| The House of Pool | Vellore | — | ~100 |
+| The OX Snooker | Vellore | — | ~100 |
+| + 1 more | Vellore area | — | ~100 |
 
-1. Firebase Console → Authentication → Users → Add user
-2. Enter their email and set a temporary password
-3. WhatsApp them their credentials and ask them to change the password after first login
-
-Their club QR code (`/club/:uid`) is automatically generated on first login — unique per account, permanent.
+**Total: 4+ clubs · 400+ daily visitors · ₹0/month infrastructure cost**
 
 ---
 
 ## Roadmap
 
-- [x] Live table dashboard with real-time timers
-- [x] Auto billing (per-minute and per-hour rates)
-- [x] Canteen add-ons per session
-- [x] WhatsApp bill receipts with UPI QR
-- [x] Offline-first PWA
-- [x] Firebase Firestore persistence
-- [x] Revenue analytics with peak hours and forecasting
-- [x] Bill history grouped by date
-- [x] Customer live view via club QR code
-- [x] Verified owner onboarding flow
-- [ ] Member credit tracking (Khatabook style)
-- [ ] Table bookings and advance reservations
-- [ ] Multi-staff roles with granular permissions
-- [ ] Automated daily WhatsApp summary (requires WhatsApp Business API)
-- [ ] Paid subscription tier after proving value
+### Completed ✅
+- Live table dashboard with real-time timers
+- Auto billing (per-minute and per-hour rates)
+- Canteen add-ons per session with delete
+- 4 payment modes: Cash / UPI / Split / Paid+Pending
+- WhatsApp bill receipts with UPI QR link
+- Standalone canteen sales with full checkout
+- PIN-protected discounts and inventory management
+- Offline-first PWA (works during power cuts)
+- Firebase Firestore real-time persistence
+- Sequential bill numbers (never resets)
+- Check-in / check-out time on every bill
+- Late check-in (charges extra, invisible on bill)
+- Revenue analytics — today, monthly, 6-month trend
+- Table vs canteen revenue split
+- Peak hour heatmap
+- Bill history grouped by date with CSV export
+- Customer live view via club QR code
+- Gated owner onboarding via WhatsApp verification
+- Owner PIN for discounts and inventory
+
+### Planned 📋
+- Member / credit tracking (Khatabook style)
+- Table bookings and advance reservations
+- Automated daily WhatsApp summary (requires WhatsApp Business API)
+- Multi-staff roles with granular permissions
+- Subscription tier after proving value at scale
 
 ---
 
