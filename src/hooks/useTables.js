@@ -93,8 +93,9 @@ export function useTables(settingsTables) {
 
     const now          = Date.now()
     const billNumber   = await getNextBillNumber()
-    const lateMs       = (table.lateMinutes || 0) * 60 * 1000
-    const checkInTime  = new Date(now - table.elapsed * 1000 - lateMs)
+    const lateSeconds   = (table.lateMinutes || 0) * 60
+    const billedSeconds = table.elapsed + lateSeconds
+    const checkInTime   = new Date(now - billedSeconds * 1000)
     const checkOutTime = new Date(now)
 
     await addDoc(billsCol(), {
@@ -104,7 +105,7 @@ export function useTables(settingsTables) {
       tableName:    table.name,
       tableType:    table.type,
       tableSize:    table.size,
-      elapsed:      table.elapsed,
+      elapsed:      billedSeconds,
       lateMinutes:  table.lateMinutes || 0,
       ratePerMin:   table.ratePerMin,
       tableCharge:  billData.tableCharge,
