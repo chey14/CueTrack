@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useClubSettings } from '../hooks/useClubSettings'
+import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth'
+import { auth } from '../firebase'
 
 const TABLE_SIZES = ['Regular', 'Medium', 'Large']
 const lbl = { fontSize: '0.82rem', color: 'var(--color-text2)', marginBottom: 5, display: 'block' }
@@ -22,6 +24,14 @@ export default function Settings() {
   const [showPinForm, setShowPinForm] = useState(false)
 
   const fileInputRef = useRef(null)
+
+  // Password change state
+  const [currentPwd,   setCurrentPwd]   = useState('')
+  const [newPwd,       setNewPwd]       = useState('')
+  const [confirmPwd,   setConfirmPwd]   = useState('')
+  const [pwdMsg,       setPwdMsg]       = useState('')
+  const [showPwdForm,  setShowPwdForm]  = useState(false)
+  const [pwdLoading,   setPwdLoading]   = useState(false)
 
   useEffect(() => {
     if (!loading) {
@@ -63,6 +73,32 @@ export default function Settings() {
     setTimeout(() => setSaved(false), 2500)
   }
 
+  async function handleChangePassword(e) {
+    e.preventDefault()
+    if (newPwd.length < 6)      { setPwdMsg('error:Password must be at least 6 characters'); return }
+    if (newPwd !== confirmPwd)   { setPwdMsg('error:Passwords do not match'); return }
+    setPwdLoading(true)
+    try {
+      const user = auth.currentUser
+      // Re-authenticate first (Firebase requires this for password change)
+      const credential = EmailAuthProvider.credential(user.email, currentPwd)
+      await reauthenticateWithCredential(user, credential)
+      await updatePassword(user, newPwd)
+      setPwdMsg('success:Password changed successfully')
+      setCurrentPwd(''); setNewPwd(''); setConfirmPwd('')
+      setTimeout(() => { setPwdMsg(''); setShowPwdForm(false) }, 2500)
+    } catch (err) {
+      const msgs = {
+        'auth/wrong-password':       'error:Current password is incorrect',
+        'auth/invalid-credential':   'error:Current password is incorrect',
+        'auth/too-many-requests':    'error:Too many attempts. Try again later.',
+      }
+      setPwdMsg(msgs[err.code] || 'error:Failed to change password. Try again.')
+    } finally {
+      setPwdLoading(false)
+    }
+  }
+
   function handleChangePin(e) {
     e.preventDefault()
     const existing = localStorage.getItem('ct_owner_pin') || '1234'
@@ -101,6 +137,51 @@ export default function Settings() {
             </p>
           </div>
         </div>
+      </SectionCard>
+
+      {/* ── Change Password ──────────────────────── */}
+      <SectionCard title="Change password">
+        <p style={{ fontSize:'0.82rem', color:'var(--color-text2)', marginBottom:'0.75rem', lineHeight:1.65 }}>
+          Your email (<strong>{auth.currentUser?.email}</strong>) is fixed.
+          You can change your login password here at any time.
+        </p>
+        {!showPwdForm ? (
+          <button type="button" onClick={()=>setShowPwdForm(true)} className="btn-ghost"
+            style={{ fontSize:'0.85rem', padding:'0.45rem 1rem' }}>
+            🔒 Change password
+          </button>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:'0.75rem', maxWidth:320 }}>
+            <div>
+              <label style={lbl}>Current password</label>
+              <input className="input-field" type="password" placeholder="Current password"
+                value={currentPwd} onChange={e=>setCurrentPwd(e.target.value)} />
+            </div>
+            <div>
+              <label style={lbl}>New password (min 6 characters)</label>
+              <input className="input-field" type="password" placeholder="New password"
+                value={newPwd} onChange={e=>setNewPwd(e.target.value)} />
+            </div>
+            <div>
+              <label style={lbl}>Confirm new password</label>
+              <input className="input-field" type="password" placeholder="Confirm password"
+                value={confirmPwd} onChange={e=>setConfirmPwd(e.target.value)} />
+            </div>
+            {pwdMsg && (
+              <p style={{ fontSize:'0.82rem', color: pwdMsg.startsWith('success') ? 'var(--color-green)' : 'var(--color-red)' }}>
+                {pwdMsg.split(':')[1]}
+              </p>
+            )}
+            <div style={{ display:'flex', gap:'0.5rem' }}>
+              <button type="button" onClick={()=>{setShowPwdForm(false);setPwdMsg('')}}
+                className="btn-ghost" style={{ flex:1, justifyContent:'center' }}>Cancel</button>
+              <button type="button" onClick={handleChangePassword} disabled={pwdLoading}
+                className="btn-primary" style={{ flex:1, justifyContent:'center', opacity:pwdLoading?0.7:1 }}>
+                {pwdLoading ? 'Updating...' : 'Update password'}
+              </button>
+            </div>
+          </div>
+        )}
       </SectionCard>
 
       {/* ── Owner PIN ─────────────────────────────── */}
