@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useBills } from '../hooks/useBills'
+import { auth } from '../firebase'
 import { useClubSettings } from '../hooks/useClubSettings'
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -93,10 +94,11 @@ export default function Analytics() {
       .map(([name,d])=>({name,...d}))
       .sort((a,b)=>b.revenue-a.revenue)
 
-    // Payment breakdown this month
-    const payments = { cash:0, upi:0, pending:0 }
+    // Payment breakdown this month — all 4 modes + total pending amount
+    const payments = { cash:0, upi:0, split:0, paid_pending:0, pending_total:0 }
     ;(byMonth[thisMonthKey]||[]).forEach(b => {
       payments[b.paymentMode] = (payments[b.paymentMode]||0)+b.total
+      if (b.paymentMode==='paid_pending') payments.pending_total += (b.pendingAmount||0)
     })
 
     // Table vs canteen revenue split — today and this month
@@ -136,6 +138,25 @@ export default function Analytics() {
     ].filter(Boolean)
     const msg = encodeURIComponent(lines.join('\n'))
     window.open(`https://api.whatsapp.com/send?phone=${phone}&text=${msg}`, '_blank', 'noopener,noreferrer')
+  }
+
+  // ── Settle pending bill ─────────────────────────────────────
+  async function settlePending(billId) {
+    if (!billId) return
+    const uid = auth.currentUser?.uid
+    if (!uid) return
+    try {
+      const { doc, updateDoc } = await import('firebase/firestore')
+      const { db } = await import('../firebase')
+      await updateDoc(doc(db, 'clubs', uid, 'bills', billId), {
+        paymentMode:   'cash',
+        pendingAmount: 0,
+        settledAt:     new Date().toISOString(),
+      })
+    } catch (e) {
+      console.error('Settle failed:', e)
+      alert('Failed to settle. Please try again.')
+    }
   }
 
   // ── CSV Export ───────────────────────────────────────────────
@@ -370,14 +391,20 @@ export default function Analytics() {
           {/* Payment breakdown */}
           <div className="card" style={{ padding:'1.25rem' }}>
             <h3 style={{ fontFamily:'var(--font-display)',fontWeight:600,fontSize:'0.95rem',marginBottom:'0.85rem' }}>Payments this month</h3>
-            <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'0.6rem' }}>
-              {[['cash','Cash','var(--color-green)'],['upi','UPI','var(--color-blue)'],['pending','Pending','var(--color-red)']].map(([key,label,color]) => (
-                <div key={key} style={{ background:'var(--color-bg3)',borderRadius:8,padding:'0.85rem',textAlign:'center' }}>
+            <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.6rem',marginBottom:'0.6rem' }}>
+              {[['cash','Cash','var(--color-green)'],['upi','UPI','var(--color-blue)'],['split','UPI+Cash','var(--color-blue)'],['paid_pending','Partially Paid','var(--color-amber)']].map(([key,label,color]) => (
+                <div key={key} style={{ background:'var(--color-bg3)',borderRadius:8,padding:'0.85rem' }}>
                   <div style={{ fontSize:'0.72rem',color:'var(--color-text3)',marginBottom:4 }}>{label}</div>
                   <div style={{ fontFamily:'var(--font-display)',fontWeight:700,fontSize:'1.05rem',color }}>{inr(payments[key]||0)}</div>
                 </div>
               ))}
             </div>
+            {payments.pending_total>0 && (
+              <div style={{ background:'rgba(239,68,68,0.06)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:8,padding:'0.7rem 0.85rem',display:'flex',justifyContent:'space-between',alignItems:'center' }}>
+                <span style={{ fontSize:'0.82rem',color:'var(--color-text2)' }}>⚠ Outstanding pending amount</span>
+                <span style={{ fontFamily:'var(--font-display)',fontWeight:700,color:'var(--color-red)' }}>{inr(Math.round(payments.pending_total))}</span>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -388,7 +415,7 @@ export default function Analytics() {
           {/* Filter pills + export */}
           <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'1.25rem',flexWrap:'wrap',gap:'0.75rem' }}>
             <div style={{ display:'flex',gap:6,flexWrap:'wrap' }}>
-              {[['all','All'],['cash','Cash'],['upi','UPI'],['pending','Pending']].map(([val,label]) => (
+              {[['all','All'],['cash','Cash'],['upi','UPI'],['split','UPI+Cash'],['paid_pending','Partially Paid'],['pending_only','Pending only']].map(([val,label]) => (
                 <button key={val} onClick={()=>setHistoryFilter(val)}
                   style={{ padding:'0.35rem 0.85rem',borderRadius:20,border:`1px solid ${historyFilter===val?'var(--color-green)':'var(--color-border)'}`,background:historyFilter===val?'var(--color-green-glow)':'transparent',color:historyFilter===val?'var(--color-green)':'var(--color-text3)',fontFamily:'var(--font-display)',fontWeight:600,fontSize:'0.78rem',cursor:'pointer',transition:'all 0.15s' }}>
                   {label}
@@ -403,7 +430,11 @@ export default function Analytics() {
 
           {/* Bills grouped by date */}
           {sortedDateKeys.map(dk => {
-            const dayBills = (byDate[dk] || []).filter(b => historyFilter==='all' || b.paymentMode===historyFilter)
+            const dayBills = (byDate[dk] || []).filter(b => {
+              if (historyFilter==='all') return true
+              if (historyFilter==='pending_only') return b.paymentMode==='paid_pending' || b.paymentMode==='pending'
+              return b.paymentMode===historyFilter
+            })
             if (!dayBills.length) return null
             const dayTotal = dayBills.reduce((s,b)=>s+b.total, 0)
             return (
@@ -424,20 +455,25 @@ export default function Analytics() {
                     const checkIn  = b.checkInTime  ? new Date(b.checkInTime)  : null
                     const checkOut = b.checkOutTime ? new Date(b.checkOutTime) : b.createdAt
                     const fmtT = (d) => d?.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true}) || '—'
+                    const onSettlePending = (billId, pendingAmt) => {
+                      if (window.confirm(`Mark ₹${Math.round(pendingAmt)} as collected for this bill?`)) {
+                        settlePending(billId)
+                      }
+                    }
                     return (
                       <div key={b.id} className="card"
-                        style={{ padding:'0.85rem 1.1rem',display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'0.75rem',flexWrap:'wrap' }}>
-                        <div style={{ flex:1,minWidth:180 }}>
-                          <div style={{ display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:2 }}>
-                            <span style={{ fontWeight:600,fontSize:'0.88rem' }}>{b.tableName}</span>
-                            {b.customer?.name && <span style={{ color:'var(--color-text3)',fontSize:'0.8rem' }}>· {b.customer.name}</span>}
+                        style={{ padding:'1rem 1.25rem',display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'0.75rem',flexWrap:'wrap' }}>
+                        <div style={{ flex:1,minWidth:200 }}>
+                          <div style={{ display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:4 }}>
+                            <span style={{ fontWeight:700,fontSize:'0.95rem' }}>{b.tableName}</span>
+                            {b.customer?.name && <span style={{ color:'var(--color-text2)',fontSize:'0.85rem' }}>· {b.customer.name}</span>}
                           </div>
                           {b.billNumber && (
-                            <div style={{ fontSize:'0.7rem',color:'var(--color-green)',fontFamily:'var(--font-display)',fontWeight:600,marginBottom:2 }}>
+                            <div style={{ fontSize:'0.75rem',color:'var(--color-green)',fontFamily:'var(--font-display)',fontWeight:600,marginBottom:4 }}>
                               #{b.billNumber}
                             </div>
                           )}
-                          <div style={{ fontSize:'0.72rem',color:'var(--color-text3)',display:'flex',gap:'0.75rem',flexWrap:'wrap' }}>
+                          <div style={{ fontSize:'0.8rem',color:'var(--color-text2)',display:'flex',gap:'0.85rem',flexWrap:'wrap' }}>
                             {b.billType==='canteen' ? (
                               <span style={{ color:'var(--color-amber)' }}>🍟 Canteen sale</span>
                             ) : (
@@ -449,20 +485,30 @@ export default function Analytics() {
                             )}
                             {b.canteenTotal>0 && b.billType!=='canteen' && <span>Canteen ₹{Math.round(b.canteenTotal)}</span>}
                             {b.discount>0 && <span style={{ color:'var(--color-green)',fontWeight:600 }}>Discount -₹{Math.round(b.discount)}</span>}
+                            {b.paymentMode==='paid_pending' && b.pendingAmount>0 && <span style={{ color:'var(--color-red)',fontWeight:600 }}>Pending ₹{Math.round(b.pendingAmount)}</span>}
                           </div>
                         </div>
-                        <div style={{ display:'flex',alignItems:'center',gap:'0.6rem' }}>
-                          <span className={
-                            b.paymentMode==='cash'         ? 'tag tag-green'  :
-                            b.paymentMode==='upi'          ? 'tag tag-blue'   :
-                            b.paymentMode==='split'        ? 'tag tag-blue'   :
-                            b.paymentMode==='paid_pending' ? 'tag tag-amber'  : 'tag tag-red'
-                          } style={{ fontSize:'0.68rem' }}>
-                            {b.paymentMode==='split'?'UPI+Cash':b.paymentMode==='paid_pending'?'Part paid':b.paymentMode}
-                          </span>
-                          <span style={{ fontFamily:'var(--font-display)',fontWeight:700,color:'var(--color-green)',fontSize:'0.95rem' }}>
-                            {inr(b.total)}
-                          </span>
+                        <div style={{ display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'0.4rem' }}>
+                          <div style={{ display:'flex',alignItems:'center',gap:'0.6rem' }}>
+                            <span className={
+                              b.paymentMode==='cash'         ? 'tag tag-green'  :
+                              b.paymentMode==='upi'          ? 'tag tag-blue'   :
+                              b.paymentMode==='split'        ? 'tag tag-blue'   :
+                              b.paymentMode==='paid_pending' ? 'tag tag-amber'  : 'tag tag-red'
+                            } style={{ fontSize:'0.72rem' }}>
+                              {{split:'UPI+Cash',paid_pending:'Partially paid',cash:'Cash',upi:'UPI'}[b.paymentMode]||b.paymentMode}
+                            </span>
+                            <span style={{ fontFamily:'var(--font-display)',fontWeight:700,color:'var(--color-green)',fontSize:'1rem' }}>
+                              {inr(b.total)}
+                            </span>
+                          </div>
+                          {b.paymentMode==='paid_pending' && b.pendingAmount>0 && (
+                            <button
+                              onClick={()=>onSettlePending(b.id, b.pendingAmount)}
+                              style={{ fontSize:'0.72rem',padding:'2px 8px',borderRadius:5,border:'1px solid var(--color-green)',background:'var(--color-green-glow)',color:'var(--color-green)',cursor:'pointer',fontWeight:600 }}>
+                              Settle ₹{Math.round(b.pendingAmount)}
+                            </button>
+                          )}
                         </div>
                       </div>
                     )
