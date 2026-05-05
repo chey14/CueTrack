@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useClubSettings } from '../hooks/useClubSettings'
 import { useTables } from '../hooks/useTables'
 
@@ -507,10 +507,12 @@ function CanteenCheckoutModal({ items, upiId, upiQrBase64, upiQrUrl, clubName, o
           splitOk={splitOk} pendingAmt={pendingAmt}
         />
 
-        {/* Discount */}
-        <div style={{ marginBottom: '1rem' }}>
-          <DiscountSection subtotal={subtotal} discountAmt={discountAmt} setDiscountAmt={setDiscountAmt} />
-        </div>
+        {/* Hidden discount — revealed by triple-clicking the title */}
+        {showHiddenDiscount && (
+          <div style={{ marginBottom: '1rem', padding: '0.6rem 0.85rem', background: 'var(--color-bg3)', borderRadius: 8, border: '1px solid var(--color-border)' }}>
+            <DiscountSection subtotal={subtotal} discountAmt={discountAmt} setDiscountAmt={setDiscountAmt} />
+          </div>
+        )}
 
         <div style={{ display: 'flex', gap: '0.6rem' }}>
           <button onClick={onClose} className="btn-ghost" style={{ flex: 1, justifyContent: 'center' }}>Cancel</button>
@@ -529,8 +531,10 @@ function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, onClose, onC
   const [paymentMode, setPaymentMode] = useState('cash')
   const [cashAmt,     setCashAmt]     = useState('')
   const [upiAmt,      setUpiAmt]      = useState('')
-  const [discountAmt, setDiscountAmt] = useState(0)
-  const [sending,     setSending]     = useState(false)
+  const [discountAmt,       setDiscountAmt]       = useState(0)
+  const [sending,           setSending]           = useState(false)
+  const [showHiddenDiscount,setShowHiddenDiscount] = useState(false)
+  const titleClickRef = useRef(0)
 
   // lateMinutes: extra time charged but NOT shown as "late check-in" on the bill.
   // The bill just shows a slightly longer billed duration with no mention of late arrival.
@@ -627,7 +631,10 @@ function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, onClose, onC
   return (
     <Modal onClose={onClose}>
       <div className="card" style={{ width: '100%', maxWidth: 500, padding: '1.75rem', maxHeight: '93vh', overflowY: 'auto' }}>
-        <h3 style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.25rem' }}>
+        {/* Triple-click the title to reveal hidden discount field */}
+        <h3
+          onClick={() => { if (++titleClickRef.current >= 3) { setShowHiddenDiscount(true); titleClickRef.current = 0 } }}
+          style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.1rem', marginBottom: '0.25rem', cursor: 'default', userSelect: 'none' }}>
           Checkout — {table.name}
         </h3>
         {table.customer?.name && (
@@ -680,10 +687,12 @@ function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, onClose, onC
           splitOk={splitOk} pendingAmt={pendingAmt}
         />
 
-        {/* Discount */}
-        <div style={{ marginBottom: '1rem' }}>
-          <DiscountSection subtotal={subtotal} discountAmt={discountAmt} setDiscountAmt={setDiscountAmt} />
-        </div>
+        {/* Hidden discount — revealed by triple-clicking the title */}
+        {showHiddenDiscount && (
+          <div style={{ marginBottom: '1rem', padding: '0.6rem 0.85rem', background: 'var(--color-bg3)', borderRadius: 8, border: '1px solid var(--color-border)' }}>
+            <DiscountSection subtotal={subtotal} discountAmt={discountAmt} setDiscountAmt={setDiscountAmt} />
+          </div>
+        )}
 
         {/* WhatsApp note */}
         {table.customer?.phone && (
