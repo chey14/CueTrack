@@ -13,7 +13,6 @@ function counterRef(){ return doc(db, 'clubs', uid(), 'settings', 'billCounter')
 
 // Sequential bill number: CT-YYYYMMDD-001, 002, ...
 // runTransaction ensures two simultaneous checkouts never get the same number.
-// The counter never resets — #42 today means #43 tomorrow.
 async function getNextBillNumber() {
   const d    = new Date()
   const date = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`
@@ -83,23 +82,35 @@ export function useTables(settingsTables) {
     await updateTable(tableId, { canteen: currentCanteen.filter((_, i) => i !== index) })
   }
 
-  async function updateCustomer(tableId, customer) {
-    await updateTable(tableId, { customer })
+  async function updateCustomer(tableId, customer, lateMinutes) {
+    // When editing mid-session, update customer info AND lateMinutes if provided
+    const updates = { customer }
+    if (lateMinutes !== undefined) updates.lateMinutes = lateMinutes
+    await updateTable(tableId, updates)
+  }
+
+  // ── Reset table (delete session, no bill saved) ───────────────
+  // Only called after the caller confirms elapsed < 3 minutes.
+  async function resetTable(tableId) {
+    await updateTable(String(tableId), {
+      status: 'available', elapsed: 0, startTime: null,
+      lateMinutes: 0, canteen: [], customer: null,
+    })
   }
 
   // ── Table checkout ────────────────────────────────────────────
   async function checkoutTable(table, billData) {
     if (!uid()) return
 
-    const now          = Date.now()
-    const billNumber   = await getNextBillNumber()
+    const now           = Date.now()
+    const billNumber    = await getNextBillNumber()
     const lateSeconds   = (table.lateMinutes || 0) * 60
     const billedSeconds = table.elapsed + lateSeconds
     const checkInTime   = new Date(now - billedSeconds * 1000)
-    const checkOutTime = new Date(now)
+    const checkOutTime  = new Date(now)
 
     await addDoc(billsCol(), {
-      billType:     'table',           // distinguishes from canteen-only bills
+      billType:     'table',
       billNumber,
       tableId:      String(table.id),
       tableName:    table.name,
@@ -132,7 +143,6 @@ export function useTables(settingsTables) {
   }
 
   // ── Standalone canteen checkout (no table session) ─────────────
-  // This is for walk-in customers who just buy snacks/drinks.
   async function saveCanteenBill(items, billData) {
     if (!uid()) return
 
@@ -140,7 +150,7 @@ export function useTables(settingsTables) {
     const checkOutTime = new Date().toISOString()
 
     await addDoc(billsCol(), {
-      billType:     'canteen',         // canteen-only sale
+      billType:     'canteen',
       billNumber,
       tableName:    'Canteen',
       tableId:      'canteen',
@@ -167,6 +177,6 @@ export function useTables(settingsTables) {
     tables, loading,
     startTable, pauseTable, resumeTable,
     addCanteenItems, removeCanteenItem, updateCustomer,
-    checkoutTable, saveCanteenBill,
+    checkoutTable, saveCanteenBill, resetTable,
   }
 }
