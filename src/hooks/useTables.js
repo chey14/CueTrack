@@ -71,7 +71,11 @@ export function useTables(settingsTables) {
   }
 
   async function resumeTable(tableId) {
-    await updateTable(tableId, { status: 'running' })
+    // Reset startTime to NOW so the live timer computes:
+    //   liveElapsed = savedElapsed + (Date.now() - newStartTime)
+    // Without this, startTime is still the original session start,
+    // so all the paused time gets incorrectly added to the display.
+    await updateTable(tableId, { status: 'running', startTime: Date.now() })
   }
 
   async function addCanteenItems(tableId, currentCanteen, newItems) {
