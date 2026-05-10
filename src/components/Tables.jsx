@@ -96,16 +96,14 @@ function CustomerModal({ table, isEditing, onConfirm, onClose }) {
               10-digit, country code added automatically.
             </p>
           </div>
-          {!isEditing && (
-            <div>
-              <label style={lbl}>Late check-in (minutes)</label>
-              <input className="input-field" type="number" min="0" placeholder="0"
-                value={lateMinutes} onChange={e => setLateMinutes(parseInt(e.target.value) || 0)} />
-              <p style={{ fontSize: '0.72rem', color: 'var(--color-text3)', marginTop: 3 }}>
-                If customer arrived earlier — not shown on bill.
-              </p>
-            </div>
-          )}
+          <div>
+            <label style={lbl}>Late check-in (minutes)</label>
+            <input className="input-field" type="number" min="0" placeholder="0"
+              value={lateMinutes} onChange={e => setLateMinutes(parseInt(e.target.value) || 0)} />
+            <p style={{ fontSize: '0.72rem', color: 'var(--color-text3)', marginTop: 3 }}>
+              Extra time to charge — not shown on bill.
+            </p>
+          </div>
         </div>
 
         <div style={{ display: 'flex', gap: '0.6rem' }}>
@@ -728,7 +726,7 @@ function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, onClose, onC
 }
 
 // ── Table card ────────────────────────────────────────────────────
-function TableCard({ table, onStart, onEditCustomer, onPause, onResume, onEnd, onAddCanteen, onRemoveCanteen }) {
+function TableCard({ table, onStart, onEditCustomer, onPause, onResume, onEnd, onAddCanteen, onRemoveCanteen, onDelete }) {
   const cost         = table.elapsed * table.ratePerMin / 60
   const canteenTotal = table.canteen.reduce((s, i) => s + i.price, 0)
 
@@ -814,6 +812,7 @@ function TableCard({ table, onStart, onEditCustomer, onPause, onResume, onEnd, o
             <button onClick={() => onPause(table.id)} className="btn-ghost" style={{ flex: 1, justifyContent: 'center', padding: '0.5rem', fontSize: '0.85rem' }}>⏸ Pause</button>
             <button onClick={() => onAddCanteen(table.id)} className="btn-ghost" style={{ flex: 'none', padding: '0.5rem 0.7rem', fontSize: '0.85rem' }}>🍟</button>
             <button onClick={() => onEnd(table.id)} style={{ flex: 1, padding: '0.5rem', borderRadius: 8, border: '1px solid rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.08)', color: 'var(--color-red)', fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}>■ End</button>
+            <button onClick={() => onDelete(table.id, table.elapsed)} title="Delete session (only if < 3 min)" style={{ flex: 'none', padding: '0.5rem 0.6rem', borderRadius: 8, border: '1px solid rgba(239,68,68,0.25)', background: 'transparent', color: 'rgba(239,68,68,0.5)', cursor: 'pointer', fontSize: '0.8rem' }}>🗑</button>
           </>
         )}
         {table.status === 'paused' && (
@@ -821,6 +820,7 @@ function TableCard({ table, onStart, onEditCustomer, onPause, onResume, onEnd, o
             <button onClick={() => onResume(table.id)} className="btn-primary" style={{ flex: 1, justifyContent: 'center', padding: '0.5rem', fontSize: '0.85rem' }}>▶ Resume</button>
             <button onClick={() => onAddCanteen(table.id)} className="btn-ghost" style={{ flex: 'none', padding: '0.5rem 0.7rem', fontSize: '0.85rem' }}>🍟</button>
             <button onClick={() => onEnd(table.id)} style={{ flex: 'none', padding: '0.5rem 0.85rem', borderRadius: 8, border: '1px solid rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.08)', color: 'var(--color-red)', fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}>■ End</button>
+            <button onClick={() => onDelete(table.id, table.elapsed)} title="Delete session (only if < 3 min)" style={{ flex: 'none', padding: '0.5rem 0.6rem', borderRadius: 8, border: '1px solid rgba(239,68,68,0.25)', background: 'transparent', color: 'rgba(239,68,68,0.5)', cursor: 'pointer', fontSize: '0.8rem' }}>🗑</button>
           </>
         )}
       </div>
@@ -835,10 +835,10 @@ export default function Tables() {
     tables, loading,
     startTable, pauseTable, resumeTable,
     addCanteenItems, removeCanteenItem, updateCustomer,
-    checkoutTable, saveCanteenBill,
+    checkoutTable, saveCanteenBill, resetTable,
   } = useTables(settings.tables)
 
-  const [startTarget,       setStartTarget]       = useState(null)
+  const [startTarget,       setStartTarget]       = useState(null)  // kept for edit (late check-in via Edit button)
   const [editCustomerId,    setEditCustomerId]    = useState(null)
   const [checkoutTarget,    setCheckoutTarget]    = useState(null)
   const [canteenTarget,     setCanteenTarget]     = useState(null)
@@ -865,14 +865,26 @@ export default function Tables() {
     setStartTarget(null)
   }
 
-  async function handleEditCustomer(tableId, customer) {
-    await updateCustomer(tableId, customer)
+  async function handleEditCustomer(tableId, customer, lateMinutes) {
+    await updateCustomer(tableId, customer, lateMinutes)
     setEditCustomerId(null)
   }
 
   async function handlePause(tableId) {
     const t = liveTables.find(t => t.id === tableId)
     await pauseTable(tableId, t.elapsed)
+  }
+
+  // Delete session — only allowed if timer < 3 minutes (180 seconds)
+  // Resets table to available WITHOUT saving any bill record
+  async function handleDelete(tableId, currentElapsed) {
+    if (currentElapsed > 180) {
+      alert(`Cannot delete — timer is over 3 minutes (${Math.floor(currentElapsed/60)}m ${currentElapsed%60}s). Use End to checkout normally.`)
+      return
+    }
+    if (!window.confirm('Delete this session? No bill will be saved and this cannot be undone.')) return
+    // Reset table to available — same as checkout but no addDoc call
+    await resetTable(String(tableId))
   }
 
   async function handleAddCanteen(tableId, items) {
@@ -927,32 +939,26 @@ export default function Tables() {
         {liveTables.map(table => (
           <TableCard
             key={table.id} table={table}
-            onStart={setStartTarget}
+            onStart={(id) => startTable(id, null, 0)}
             onEditCustomer={setEditCustomerId}
             onPause={handlePause}
             onResume={resumeTable}
             onEnd={(id) => setCheckoutTarget(liveTables.find(t => t.id === id))}
             onAddCanteen={setCanteenTarget}
             onRemoveCanteen={handleRemoveCanteen}
+            onDelete={handleDelete}
           />
         ))}
       </div>
 
       {/* ── Modals ── */}
-      {startTarget && (
-        <CustomerModal
-          table={liveTables.find(t => t.id === startTarget)}
-          isEditing={false}
-          onConfirm={(customer, lateMinutes) => handleConfirmStart(startTarget, customer, lateMinutes)}
-          onClose={() => setStartTarget(null)}
-        />
-      )}
+      {/* Start is now instant — no modal. Use Edit button to add customer details. */}
 
       {editCustomerId && (
         <CustomerModal
           table={liveTables.find(t => t.id === editCustomerId)}
           isEditing={true}
-          onConfirm={(customer) => handleEditCustomer(editCustomerId, customer)}
+          onConfirm={(customer, lateMinutes) => handleEditCustomer(editCustomerId, customer, lateMinutes)}
           onClose={() => setEditCustomerId(null)}
         />
       )}
