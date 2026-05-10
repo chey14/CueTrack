@@ -159,10 +159,16 @@ export default function Analytics() {
     }
   }
 
-
-  // ── CSV helper — shared row builder ─────────────────────────
-  function buildRows(billList) {
-    return billList.map(b => {
+  // ── CSV Export ───────────────────────────────────────────────
+  function exportCSV() {
+    if (!bills.length) return
+    const headers = [
+      'Bill No', 'Date', 'Check-in', 'Check-out', 'Duration (min)',
+      'Table', 'Type', 'Size', 'Rate/hr (₹)',
+      'Table Charge (₹)', 'Canteen (₹)', 'Total (₹)',
+      'Payment', 'Customer', 'Phone'
+    ]
+    const rows = bills.map(b => {
       const checkIn  = b.checkInTime  ? new Date(b.checkInTime)  : null
       const checkOut = b.checkOutTime ? new Date(b.checkOutTime) : b.createdAt
       const fmtT = (d) => d ? d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true}) : ''
@@ -176,58 +182,27 @@ export default function Analytics() {
         b.tableName,
         b.tableType || '',
         b.tableSize || '',
-        b.ratePerMin ? (b.ratePerMin * 60).toFixed(0) : '',
+        (b.ratePerMin * 60).toFixed(0),
         b.tableCharge?.toFixed(2) || '',
         b.canteenTotal?.toFixed(2) || '0',
-        b.discount?.toFixed(2) || '0',
         b.total.toFixed(2),
-        { cash:'Cash', upi:'UPI', split:'UPI+Cash', paid_pending:'Partially Paid' }[b.paymentMode] || b.paymentMode,
+        b.paymentMode,
         b.customer?.name || '',
         b.customer?.phone || '',
       ]
     })
-  }
-
-  function downloadCSV(rows, headers, filename, totalLabel) {
-    const totalRow = ['', '', '', '', '', '', '', '', '', '', '', 'TOTAL', rows.reduce((s,r)=>s+parseFloat(r[12]||0),0).toFixed(2), '', '', '']
-    const csv = [headers, ...rows, totalLabel ? totalRow : null]
-      .filter(Boolean)
+    // Build CSV string
+    const csv = [headers, ...rows]
       .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
       .join('\n')
+    // Download
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url  = URL.createObjectURL(blob)
     const a    = document.createElement('a')
-    a.href = url; a.download = filename; a.click()
+    a.href     = url
+    a.download = `cuetrack-bills-${new Date().toISOString().slice(0,10)}.csv`
+    a.click()
     URL.revokeObjectURL(url)
-  }
-
-  const CSV_HEADERS = [
-    'Bill No', 'Date', 'Check-in', 'Check-out', 'Duration (min)',
-    'Table', 'Type', 'Size', 'Rate/hr (₹)',
-    'Table Charge (₹)', 'Canteen (₹)', 'Discount (₹)', 'Total (₹)',
-    'Payment', 'Customer', 'Phone'
-  ]
-
-  function exportCSV() {
-    if (!bills.length) return
-    downloadCSV(buildRows(bills), CSV_HEADERS, `cuetrack-all-bills-${new Date().toISOString().slice(0,10)}.csv`, true)
-  }
-
-  function exportDayCSV() {
-    const todayKey = dateKey(new Date())
-    const todayBills = bills.filter(b => dateKey(b.createdAt) === todayKey)
-    if (!todayBills.length) { alert('No bills for today yet.'); return }
-    const label = new Date().toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' })
-    downloadCSV(buildRows(todayBills), CSV_HEADERS, `cuetrack-today-${todayKey}.csv`, true)
-  }
-
-  function exportMonthCSV() {
-    const mk = monthKey(new Date())
-    const monthBills = bills.filter(b => monthKey(b.createdAt) === mk)
-    if (!monthBills.length) { alert('No bills for this month yet.'); return }
-    const [y,m] = mk.split('-')
-    const label = new Date(y,m-1,1).toLocaleString('en-IN',{month:'long',year:'numeric'})
-    downloadCSV(buildRows(monthBills), CSV_HEADERS, `cuetrack-${label.replace(' ','-')}.csv`, true)
   }
 
   // ── Loading / empty states ────────────────────────────────────
@@ -447,20 +422,10 @@ export default function Analytics() {
                 </button>
               ))}
             </div>
-            <div style={{ display:'flex',gap:'0.4rem',flexWrap:'wrap' }}>
-              <button onClick={exportDayCSV} className="btn-ghost"
-                style={{ fontSize:'0.78rem',padding:'0.4rem 0.75rem',display:'flex',alignItems:'center',gap:'0.3rem' }}>
-                ⬇ Today
-              </button>
-              <button onClick={exportMonthCSV} className="btn-ghost"
-                style={{ fontSize:'0.78rem',padding:'0.4rem 0.75rem',display:'flex',alignItems:'center',gap:'0.3rem' }}>
-                ⬇ This month
-              </button>
-              <button onClick={exportCSV} className="btn-ghost"
-                style={{ fontSize:'0.78rem',padding:'0.4rem 0.75rem',display:'flex',alignItems:'center',gap:'0.3rem' }}>
-                ⬇ All bills
-              </button>
-            </div>
+            <button onClick={exportCSV} className="btn-ghost"
+              style={{ fontSize:'0.8rem',padding:'0.4rem 0.9rem',display:'flex',alignItems:'center',gap:'0.4rem' }}>
+              ⬇ Export CSV
+            </button>
           </div>
 
           {/* Bills grouped by date */}
@@ -476,10 +441,10 @@ export default function Analytics() {
               <div key={dk} style={{ marginBottom:'1.5rem' }}>
                 {/* Date header */}
                 <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'0.6rem',paddingBottom:'0.4rem',borderBottom:'1px solid var(--color-border)' }}>
-                  <h4 style={{ fontFamily:'var(--font-display)',fontWeight:700,fontSize:'1rem',color: dk===dateKey(new Date())?'var(--color-green)':'var(--color-text)' }}>
+                  <h4 style={{ fontFamily:'var(--font-display)',fontWeight:600,fontSize:'0.9rem',color: dk===dateKey(new Date())?'var(--color-green)':'var(--color-text)' }}>
                     {friendlyDate(dk)}
                   </h4>
-                  <span style={{ fontFamily:'var(--font-display)',fontWeight:700,fontSize:'0.95rem',color:'var(--color-green)' }}>
+                  <span style={{ fontFamily:'var(--font-display)',fontWeight:700,fontSize:'0.9rem',color:'var(--color-green)' }}>
                     {inr(dayTotal)} · {dayBills.length} bill{dayBills.length!==1?'s':''}
                   </span>
                 </div>
@@ -497,45 +462,43 @@ export default function Analytics() {
                     }
                     return (
                       <div key={b.id} className="card"
-                        style={{ padding:'1.1rem 1.25rem', display:'flex', alignItems:'flex-start', gap:'1rem', flexWrap:'wrap' }}>
-                        {/* Left: bill details — flex:1 but capped so amount stays close */}
-                        <div style={{ flex:'1 1 260px', minWidth:0, maxWidth:'70%' }}>
-                          <div style={{ display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:5 }}>
-                            <span style={{ fontWeight:700,fontSize:'1rem',color:'var(--color-text)' }}>{b.tableName}</span>
-                            {b.customer?.name && <span style={{ color:'var(--color-text2)',fontSize:'0.88rem' }}>· {b.customer.name}</span>}
+                        style={{ padding:'1rem 1.25rem',display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:'0.75rem',flexWrap:'wrap' }}>
+                        <div style={{ flex:1,minWidth:200 }}>
+                          <div style={{ display:'flex',alignItems:'center',gap:'0.5rem',marginBottom:4 }}>
+                            <span style={{ fontWeight:700,fontSize:'0.95rem' }}>{b.tableName}</span>
+                            {b.customer?.name && <span style={{ color:'var(--color-text2)',fontSize:'0.85rem' }}>· {b.customer.name}</span>}
                           </div>
                           {b.billNumber && (
-                            <div style={{ fontSize:'0.78rem',color:'var(--color-green)',fontFamily:'var(--font-display)',fontWeight:600,marginBottom:5 }}>
+                            <div style={{ fontSize:'0.75rem',color:'var(--color-green)',fontFamily:'var(--font-display)',fontWeight:600,marginBottom:4 }}>
                               #{b.billNumber}
                             </div>
                           )}
-                          <div style={{ fontSize:'0.85rem',color:'var(--color-text)',display:'flex',gap:'1rem',flexWrap:'wrap' }}>
+                          <div style={{ fontSize:'0.8rem',color:'var(--color-text2)',display:'flex',gap:'0.85rem',flexWrap:'wrap' }}>
                             {b.billType==='canteen' ? (
-                              <span style={{ color:'var(--color-amber)',fontWeight:500 }}>🍟 Canteen sale</span>
+                              <span style={{ color:'var(--color-amber)' }}>🍟 Canteen sale</span>
                             ) : (
                               <>
-                                <span style={{ color:'var(--color-text)',fontWeight:500 }}>In: {fmtT(checkIn)}</span>
-                                <span style={{ color:'var(--color-text)',fontWeight:500 }}>Out: {fmtT(checkOut)}</span>
-                                <span style={{ color:'var(--color-text)',fontWeight:500 }}>{Math.floor(b.elapsed/60)}m {b.elapsed%60}s</span>
+                                <span>In: {fmtT(checkIn)}</span>
+                                <span>Out: {fmtT(checkOut)}</span>
+                                <span>{Math.floor(b.elapsed/60)}m {b.elapsed%60}s</span>
                               </>
                             )}
-                            {b.canteenTotal>0 && b.billType!=='canteen' && <span style={{ color:'var(--color-text2)' }}>Canteen ₹{Math.round(b.canteenTotal)}</span>}
+                            {b.canteenTotal>0 && b.billType!=='canteen' && <span>Canteen ₹{Math.round(b.canteenTotal)}</span>}
                             {b.discount>0 && <span style={{ color:'var(--color-green)',fontWeight:600 }}>Discount -₹{Math.round(b.discount)}</span>}
                             {b.paymentMode==='paid_pending' && b.pendingAmount>0 && <span style={{ color:'var(--color-red)',fontWeight:600 }}>Pending ₹{Math.round(b.pendingAmount)}</span>}
                           </div>
                         </div>
-                        {/* Right: payment tag + amount — sits right next to content */}
-                        <div style={{ display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'0.4rem',flexShrink:0 }}>
+                        <div style={{ display:'flex',flexDirection:'column',alignItems:'flex-end',gap:'0.4rem' }}>
                           <div style={{ display:'flex',alignItems:'center',gap:'0.6rem' }}>
                             <span className={
                               b.paymentMode==='cash'         ? 'tag tag-green'  :
                               b.paymentMode==='upi'          ? 'tag tag-blue'   :
                               b.paymentMode==='split'        ? 'tag tag-blue'   :
                               b.paymentMode==='paid_pending' ? 'tag tag-amber'  : 'tag tag-red'
-                            } style={{ fontSize:'0.75rem' }}>
+                            } style={{ fontSize:'0.72rem' }}>
                               {{split:'UPI+Cash',paid_pending:'Partially paid',cash:'Cash',upi:'UPI'}[b.paymentMode]||b.paymentMode}
                             </span>
-                            <span style={{ fontFamily:'var(--font-display)',fontWeight:700,color:'var(--color-green)',fontSize:'1.05rem' }}>
+                            <span style={{ fontFamily:'var(--font-display)',fontWeight:700,color:'var(--color-green)',fontSize:'1rem' }}>
                               {inr(b.total)}
                             </span>
                           </div>
