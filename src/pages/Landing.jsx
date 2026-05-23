@@ -395,15 +395,13 @@ function Stories() {
       name: 'Cues and Cushions Cafe',
       location: 'Vellore',
       photo: '/clubs/CNC.jpg',
-      quote: 'Before CueTrack we were writing everything in a notebook. Now billing is automatic and we never have disputes with customers.',
-      owner: 'Owner, Cues and Cushions Cafe',
+      
     },
     {
       name: 'The House of Pool',
       location: 'Vellore',
       photo: '/clubs/hop.jpg',
-      quote: 'The WhatsApp receipt feature is the best part. Customers love getting their bill directly on WhatsApp.',
-      owner: 'Owner, The House of Pool',
+      
     },
   ]
 
