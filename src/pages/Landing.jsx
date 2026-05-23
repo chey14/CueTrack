@@ -394,7 +394,7 @@ function Stories() {
     {
       name: 'Cues and Cushions Cafe',
       location: 'Vellore',
-      photo: '/clubs/cnc_new.jpeg',
+      photo: '/clubs/Cnc.jpeg',
 
     },
     {
