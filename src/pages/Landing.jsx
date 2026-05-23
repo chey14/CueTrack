@@ -388,7 +388,25 @@ function WhyCueTrack() {
 }
 
 // ---------- Success Stories ----------
+
 function Stories() {
+  const clubs = [
+    {
+      name: 'Cues and Cushions Cafe',
+      location: 'Vellore',
+      photo: '/clubs/CNC.jpg',
+      quote: 'Before CueTrack we were writing everything in a notebook. Now billing is automatic and we never have disputes with customers.',
+      owner: 'Owner, Cues and Cushions Cafe',
+    },
+    {
+      name: 'The House of Pool',
+      location: 'Vellore',
+      photo: '/clubs/hop.jpg',
+      quote: 'The WhatsApp receipt feature is the best part. Customers love getting their bill directly on WhatsApp.',
+      owner: 'Owner, The House of Pool',
+    },
+  ]
+
   return (
     <section id="stories" style={{ padding: '6rem 2rem', background: 'var(--color-bg2)' }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
@@ -398,36 +416,44 @@ function Stories() {
             Clubs already <span style={{ color: 'var(--color-green)' }}>loving it</span>
           </h2>
           <p style={{ color: 'var(--color-text2)', maxWidth: 500, margin: '0 auto' }}>
-            We're currently piloting with clubs near VIT Vellore. Stories coming soon — want to be the first?
+            Used by 4+ clubs near VIT Vellore, serving 400+ players every day.
           </p>
         </div>
 
-        {/* Placeholder cards - will be replaced with real testimonials */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1rem' }}>
-          {['Your club could be here', 'Your club could be here', 'Your club could be here'].map((_, i) => (
-            <div key={i} className="card" style={{ padding: '2rem', textAlign: 'center' }}>
-              <div style={{
-                width: 60, height: 60, borderRadius: '50%',
-                background: 'var(--color-bg3)', border: '2px dashed var(--color-border)',
-                margin: '0 auto 1rem', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: '1.5rem',
-              }}>?</div>
-              <div style={{
-                height: 12, background: 'var(--color-bg3)', borderRadius: 6,
-                marginBottom: 8, width: '80%', marginLeft: 'auto', marginRight: 'auto',
-              }} />
-              <div style={{ height: 10, background: 'var(--color-bg3)', borderRadius: 6, width: '60%', marginLeft: 'auto', marginRight: 'auto' }} />
-              <p style={{ color: 'var(--color-text3)', fontSize: '0.8rem', marginTop: '1rem' }}>
-                Be one of the first clubs to try CueTrack — free, forever.
-              </p>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.5rem' }}>
+          {clubs.map((club, i) => (
+            <div key={i} className="card" style={{ overflow: 'hidden' }}>
+              {/* Club photo */}
+              <div style={{ height: 200, overflow: 'hidden', background: 'var(--color-bg3)' }}>
+                <img
+                  src={club.photo}
+                  alt={club.name}
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              </div>
+
+              {/* Card content */}
+              <div style={{ padding: '1.25rem' }}>
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1rem' }}>
+                    {club.name}
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--color-text3)', marginTop: 2 }}>
+                    📍 {club.location}
+                  </div>
+                </div>
+
+                {/* Quote */}
+                <p style={{ fontSize: '0.88rem', color: 'var(--color-text2)', lineHeight: 1.65, fontStyle: 'italic', marginBottom: '0.75rem' }}>
+                  "{club.quote}"
+                </p>
+
+                <div style={{ fontSize: '0.78rem', color: 'var(--color-text3)', fontWeight: 500 }}>
+                  — {club.owner}
+                </div>
+              </div>
             </div>
           ))}
-        </div>
-
-        <div style={{ textAlign: 'center', marginTop: '2.5rem' }}>
-          <a href="#contact" className="btn-primary">
-            Get early access — it's free →
-          </a>
         </div>
       </div>
     </section>
