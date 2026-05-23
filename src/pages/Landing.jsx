@@ -395,13 +395,13 @@ function Stories() {
       name: 'Cues and Cushions Cafe',
       location: 'Vellore',
       photo: '/clubs/CNC.jpg',
-      
+
     },
     {
       name: 'The House of Pool',
       location: 'Vellore',
       photo: '/clubs/hop.jpg',
-      
+
     },
   ]
 
@@ -439,15 +439,6 @@ function Stories() {
                   <div style={{ fontSize: '0.78rem', color: 'var(--color-text3)', marginTop: 2 }}>
                     📍 {club.location}
                   </div>
-                </div>
-
-                {/* Quote */}
-                <p style={{ fontSize: '0.88rem', color: 'var(--color-text2)', lineHeight: 1.65, fontStyle: 'italic', marginBottom: '0.75rem' }}>
-                  "{club.quote}"
-                </p>
-
-                <div style={{ fontSize: '0.78rem', color: 'var(--color-text3)', fontWeight: 500 }}>
-                  — {club.owner}
                 </div>
               </div>
             </div>
