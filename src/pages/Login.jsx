@@ -72,7 +72,7 @@ function RequestAccessForm() {
 
       <p style={{ fontSize: '0.85rem', color: 'var(--color-text2)', lineHeight: 1.65 }}>
         Fill in your details. We'll verify you're a genuine club owner and
-        send login credentials on WhatsApp within 24 hours — completely free.
+        send login credentials on WhatsApp within 24 hours.
       </p>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
@@ -130,9 +130,6 @@ function RequestAccessForm() {
       <button type="submit" className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: 4 }}>
         Send Request via WhatsApp →
       </button>
-      <p style={{ fontSize: '0.75rem', color: 'var(--color-text3)', textAlign: 'center' }}>
-        Opens WhatsApp with your info pre-filled. We reply within 24 hours.
-      </p>
     </form>
   )
 }
