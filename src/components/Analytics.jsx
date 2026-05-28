@@ -390,7 +390,7 @@ export default function Analytics() {
             {(() => {
               const peak = hourBuckets.indexOf(Math.max(...hourBuckets))
               const pl = peak<12?`${peak}am`:peak===12?'12pm':`${peak-12}pm`
-              return <p style={{ fontSize:'0.75rem',color:'var(--color-text3)',marginTop:'0.4rem' }}>🔥 Peak hour: {pl}</p>
+              return <p style={{ fontSize:'0.75rem',color:'var(--color-text3)',marginTop:'0.4rem' }}> Peak hour: {pl}</p>
             })()}
           </div>
 

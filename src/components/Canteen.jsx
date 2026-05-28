@@ -92,9 +92,7 @@ export default function Canteen() {
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'1.25rem', flexWrap:'wrap', gap:'0.75rem' }}>
         <div>
           <h2 style={{ fontFamily:'var(--font-display)', fontWeight:700 }}>Canteen</h2>
-          <p style={{ color:'var(--color-text2)', fontSize:'0.83rem', marginTop:2 }}>
-            Menu items &amp; PIN-protected inventory management
-          </p>
+          
         </div>
         <div style={{ display:'flex', gap:'0.5rem' }}>
           <button onClick={()=>setInventoryState('pending-bulk')} className="btn-ghost" style={{ fontSize:'0.85rem' }}>

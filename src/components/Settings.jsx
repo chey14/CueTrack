@@ -233,9 +233,7 @@ export default function Settings() {
 
       {/* ── Payment & UPI ─────────────────────────── */}
       <SectionCard title="Payment & UPI">
-        <p style={{ fontSize:'0.82rem', color:'var(--color-text2)', marginBottom:'1rem', lineHeight:1.6 }}>
-          When a customer pays by UPI, the WhatsApp bill includes your UPI ID and a scannable QR link.
-        </p>
+        
 
         <div style={{ marginBottom:'1.25rem' }}>
           <label style={lbl}>Your UPI ID</label>
@@ -273,7 +271,7 @@ export default function Settings() {
             <div style={{ flex:1, minWidth:180 }}>
               <p style={{ fontSize:'0.82rem', color:'var(--color-text2)', lineHeight:1.65, marginBottom:'0.75rem' }}>
                 Upload your UPI QR from PhonePe, Google Pay, or Paytm.
-                Saved directly to your database.
+                
               </p>
               <button type="button" onClick={()=>fileInputRef.current?.click()} className="btn-ghost"
                 style={{ fontSize:'0.8rem', padding:'0.4rem 0.9rem' }} disabled={uploadingQr}>
@@ -361,7 +359,7 @@ export default function Settings() {
               </div>
               <div style={{ display:'flex', gap:'0.5rem', flexWrap:'wrap' }}>
                 <button type="button" className="btn-ghost" style={{ fontSize:'0.8rem', padding:'0.4rem 0.9rem' }}
-                  onClick={()=>{navigator.clipboard.writeText(clubViewUrl); alert('Link copied!')}}>
+                  onClick={()=>{navigator.clipboard.writeText(clubViewUrl); alert('Link copied!')}}> 
                   📋 Copy link
                 </button>
                 <a href={clubViewUrl} target="_blank" rel="noopener noreferrer" className="btn-ghost"
@@ -384,9 +382,6 @@ export default function Settings() {
         disabled={saving||uploadingQr}>
         {saving ? 'Saving...' : saved ? '✓ Saved to Firebase!' : 'Save settings'}
       </button>
-      <p style={{ fontSize:'0.75rem', color:'var(--color-text3)', textAlign:'center', marginTop:'0.75rem' }}>
-        Settings sync across all your devices via Firebase.
-      </p>
     </form>
   )
 }
