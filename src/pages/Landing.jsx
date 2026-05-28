@@ -121,7 +121,7 @@ function Hero() {
           lineHeight: 1.7, maxWidth: 560, margin: '0 auto 2.5rem', fontWeight: 300,
         }}>
           CueTrack automates table timing, billing, canteen orders, and revenue analytics
-          for snooker & pool clubs. Works offline. Sends WhatsApp receipts. Free to start.
+          for snooker & pool clubs.Sends WhatsApp receipts. Free to start.
         </p>
 
         <div className="animate-fade-up delay-3" style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -137,7 +137,7 @@ function Hero() {
           display: 'flex', gap: '2.5rem', justifyContent: 'center', marginTop: '3.5rem',
           paddingTop: '2rem', borderTop: '1px solid var(--color-border)',
         }}>
-          {[['100%', 'Billing accuracy'], ['0 disputes', 'With customers'], ['Works offline', 'No internet needed']].map(([val, lab]) => (
+          {[['100%', 'Billing accuracy'], ['0 disputes', 'With customers']].map(([val, lab]) => (
             <div key={lab} style={{ textAlign: 'center' }}>
               <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.3rem', color: 'var(--color-green)' }}>{val}</div>
               <div style={{ fontSize: '0.8rem', color: 'var(--color-text3)', marginTop: 2 }}>{lab}</div>
@@ -349,9 +349,6 @@ function WhyCueTrack() {
           <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 'clamp(1.8rem, 4vw, 2.8rem)', fontWeight: 700, marginBottom: '1rem' }}>
             Built specifically for <span style={{ color: 'var(--color-amber)' }}>local Indian clubs</span>
           </h2>
-          <p style={{ color: 'var(--color-text2)', maxWidth: 500, margin: '0 auto' }}>
-            Other software was built for large chains. CueTrack is built for the 5-table shop near your college.
-          </p>
         </div>
 
         <div className="card" style={{ overflow: 'hidden', opacity: visible ? 1 : 0, transform: visible ? 'none' : 'translateY(20px)', transition: 'all 0.5s ease' }}>
@@ -414,7 +411,7 @@ function Stories() {
             Clubs already <span style={{ color: 'var(--color-green)' }}>loving it</span>
           </h2>
           <p style={{ color: 'var(--color-text2)', maxWidth: 500, margin: '0 auto' }}>
-            Used by 4+ clubs near VIT Vellore, serving 400+ players every day.
+            Used by 2+ clubs near VIT Vellore, serving 200+ players every day.
           </p>
         </div>
 
@@ -485,7 +482,7 @@ function Contact() {
             Ready to <span style={{ color: 'var(--color-green)' }}>go digital?</span>
           </h2>
           <p style={{ color: 'var(--color-text2)', lineHeight: 1.7 }}>
-            Drop your details and we'll set your club up for free. Usually takes less than 15 minutes.
+            Drop your details and we'll set your club up.
           </p>
         </div>
 
@@ -521,9 +518,6 @@ function Contact() {
             <button type="submit" className="btn-primary" style={{ width: '100%', justifyContent: 'center', marginTop: 8 }}>
               Send via WhatsApp →
             </button>
-            <p style={{ fontSize: '0.78rem', color: 'var(--color-text3)', textAlign: 'center' }}>
-              This opens WhatsApp with your message pre-filled. No spam, ever.
-            </p>
           </form>
         )}
       </div>
@@ -558,7 +552,7 @@ function Footer() {
             >{l}</a>
           ))}
         </div>
-        <div style={{ color: 'var(--color-text3)', fontSize: '0.8rem' }}>© 2025 CueTrack</div>
+        <div style={{ color: 'var(--color-text3)', fontSize: '0.8rem' }}>© 2026 CueTrack</div>
       </div>
     </footer>
   )
