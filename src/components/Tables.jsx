@@ -15,6 +15,17 @@ function formatTimerDisplay(s) {
   return `${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
 }
 function fmtRound(n) { return `₹${Math.round(n)}` }
+
+// Sanitise and validate a phone number for WhatsApp
+// Returns null if the number is clearly invalid
+function sanitisePhone(raw) {
+  const digits = (raw || '').replace(/\D/g, '')
+  if (digits.length === 10) return '91' + digits        // Indian number, add country code
+  if (digits.length === 12 && digits.startsWith('91')) return digits  // already has +91
+  if (digits.length === 11 && digits.startsWith('0')) return '91' + digits.slice(1)
+  if (digits.length >= 10 && digits.length <= 15) return digits  // international
+  return null  // invalid
+}
 function fmtTime12(d) {
   return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })
 }
@@ -445,8 +456,8 @@ function CanteenCheckoutModal({ items, upiId, upiQrBase64, upiQrUrl, clubName, o
     }
     const billNo = await onConfirm(billData)
     if (customerPhone) {
-      let phone = customerPhone.replace(/\D/g, '')
-      if (phone.length === 10) phone = '91' + phone
+      const phone = sanitisePhone(customerPhone)
+      if (!phone) { alert('Invalid phone number — cannot send WhatsApp'); return }
       setSending(true)
       window.open(`https://api.whatsapp.com/send?phone=${phone}&text=${buildMessage(billNo)}`, '_blank', 'noopener,noreferrer')
       setSending(false)
@@ -609,8 +620,8 @@ function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, onClose, onC
     }
     const billNo = await onConfirm(billData)
     if (table.customer?.phone) {
-      let phone = table.customer.phone.replace(/\D/g, '')
-      if (phone.length === 10) phone = '91' + phone
+      const phone = sanitisePhone(table.customer.phone)
+      if (!phone) { alert('Invalid phone number — cannot send WhatsApp'); return }
       setSending(true)
       window.open(`https://api.whatsapp.com/send?phone=${phone}&text=${buildMessage(billNo)}`, '_blank', 'noopener,noreferrer')
       setSending(false)
@@ -619,8 +630,8 @@ function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, onClose, onC
 
   async function sendWhatsAppOnly() {
     if (!table.customer?.phone) return
-    let phone = table.customer.phone.replace(/\D/g, '')
-    if (phone.length === 10) phone = '91' + phone
+    const phone = sanitisePhone(table.customer.phone)
+    if (!phone) { alert('Invalid phone number — cannot send WhatsApp'); return }
     setSending(true)
     window.open(`https://api.whatsapp.com/send?phone=${phone}&text=${buildMessage('')}`, '_blank', 'noopener,noreferrer')
     setSending(false)
@@ -838,7 +849,6 @@ export default function Tables() {
     checkoutTable, saveCanteenBill, resetTable,
   } = useTables(settings.tables)
 
-  const [startTarget,       setStartTarget]       = useState(null)  // kept for edit (late check-in via Edit button)
   const [editCustomerId,    setEditCustomerId]    = useState(null)
   const [checkoutTarget,    setCheckoutTarget]    = useState(null)
   const [canteenTarget,     setCanteenTarget]     = useState(null)
@@ -859,11 +869,6 @@ export default function Tables() {
     }
     return t
   })
-
-  async function handleConfirmStart(tableId, customer, lateMinutes) {
-    await startTable(tableId, customer, lateMinutes)
-    setStartTarget(null)
-  }
 
   async function handleEditCustomer(tableId, customer, lateMinutes) {
     await updateCustomer(tableId, customer, lateMinutes)
