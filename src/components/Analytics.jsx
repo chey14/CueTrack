@@ -5,6 +5,13 @@ import { useClubSettings } from '../hooks/useClubSettings'
 
 // ── Helpers ──────────────────────────────────────────────────────
 function inr(n) { return `₹${Number(n).toLocaleString('en-IN')}` }
+function sanitisePhone(raw) {
+  const digits = (raw || '').replace(/\D/g, '')
+  if (digits.length === 10) return '91' + digits
+  if (digits.length === 12 && digits.startsWith('91')) return digits
+  if (digits.length >= 10 && digits.length <= 15) return digits
+  return null
+}
 function monthKey(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}` }
 function dateKey(d)  { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` }
 function monthLabel(key) {
@@ -390,7 +397,7 @@ export default function Analytics() {
             {(() => {
               const peak = hourBuckets.indexOf(Math.max(...hourBuckets))
               const pl = peak<12?`${peak}am`:peak===12?'12pm':`${peak-12}pm`
-              return <p style={{ fontSize:'0.75rem',color:'var(--color-text3)',marginTop:'0.4rem' }}> Peak hour: {pl}</p>
+              return <p style={{ fontSize:'0.75rem',color:'var(--color-text3)',marginTop:'0.4rem' }}>🔥 Peak hour: {pl}</p>
             })()}
           </div>
 
