@@ -351,15 +351,17 @@ function PaymentSection({ paymentMode, setPaymentMode, cashAmt, setCashAmt, upiA
 }
 
 // ── Discount section (PIN protected) ─────────────────────────────
-function DiscountSection({ subtotal, discountAmt, setDiscountAmt }) {
+function DiscountSection({ subtotal, discountAmt, setDiscountAmt, ownerPin }) {
   const [show,      setShow]      = useState(false)
   const [pin,       setPin]       = useState('')
   const [pinErr,    setPinErr]    = useState(false)
   const [unlocked,  setUnlocked]  = useState(false)
 
   function verify() {
-    const ownerPin = localStorage.getItem('ct_owner_pin') || '1234'
-    if (pin === ownerPin) { setUnlocked(true); setPinErr(false) }
+    // Read PIN from Firestore settings (passed as prop) — falls back to localStorage
+    // for backward compat, then to default '1234'
+    const correctPin = ownerPin || localStorage.getItem('ct_owner_pin') || '1234'
+    if (pin === correctPin) { setUnlocked(true); setPinErr(false) }
     else { setPinErr(true); setPin('') }
   }
 
@@ -401,7 +403,7 @@ function DiscountSection({ subtotal, discountAmt, setDiscountAmt }) {
 }
 
 // ── Canteen Checkout Modal (standalone — no table) ────────────────
-function CanteenCheckoutModal({ items, upiId, upiQrBase64, upiQrUrl, clubName, onClose, onConfirm }) {
+function CanteenCheckoutModal({ items, upiId, upiQrBase64, upiQrUrl, clubName, ownerPin, onClose, onConfirm }) {
   const [paymentMode,    setPaymentMode]    = useState('cash')
   const [cashAmt,        setCashAmt]        = useState('')
   const [upiAmt,         setUpiAmt]         = useState('')
@@ -519,7 +521,7 @@ function CanteenCheckoutModal({ items, upiId, upiQrBase64, upiQrUrl, clubName, o
         {/* Hidden discount — revealed by triple-clicking the title */}
         {showHiddenDiscount && (
           <div style={{ marginBottom: '1rem', padding: '0.6rem 0.85rem', background: 'var(--color-bg3)', borderRadius: 8, border: '1px solid var(--color-border)' }}>
-            <DiscountSection subtotal={subtotal} discountAmt={discountAmt} setDiscountAmt={setDiscountAmt} />
+            <DiscountSection subtotal={subtotal} discountAmt={discountAmt} setDiscountAmt={setDiscountAmt} ownerPin={ownerPin} />
           </div>
         )}
 
@@ -536,7 +538,7 @@ function CanteenCheckoutModal({ items, upiId, upiQrBase64, upiQrUrl, clubName, o
 }
 
 // ── Table Checkout Modal ──────────────────────────────────────────
-function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, onClose, onConfirm }) {
+function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, ownerPin, onClose, onConfirm }) {
   const [paymentMode, setPaymentMode] = useState('cash')
   const [cashAmt,     setCashAmt]     = useState('')
   const [upiAmt,      setUpiAmt]      = useState('')
@@ -699,7 +701,7 @@ function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, onClose, onC
         {/* Hidden discount — revealed by triple-clicking the title */}
         {showHiddenDiscount && (
           <div style={{ marginBottom: '1rem', padding: '0.6rem 0.85rem', background: 'var(--color-bg3)', borderRadius: 8, border: '1px solid var(--color-border)' }}>
-            <DiscountSection subtotal={subtotal} discountAmt={discountAmt} setDiscountAmt={setDiscountAmt} />
+            <DiscountSection subtotal={subtotal} discountAmt={discountAmt} setDiscountAmt={setDiscountAmt} ownerPin={ownerPin} />
           </div>
         )}
 
@@ -995,6 +997,7 @@ export default function Tables() {
           upiQrBase64={settings.upiQrBase64}
           upiQrUrl={settings.upiQrUrl}
           clubName={settings.clubName}
+          ownerPin={settings.ownerPin}
           onClose={() => { setCanteenCheckout(false); setStandaloneItems([]) }}
           onConfirm={async (billData) => {
             const billNo = await saveCanteenBill(standaloneItems, billData)
@@ -1012,6 +1015,7 @@ export default function Tables() {
           upiQrBase64={settings.upiQrBase64}
           upiQrUrl={settings.upiQrUrl}
           clubName={settings.clubName}
+          ownerPin={settings.ownerPin}
           onClose={() => setCheckoutTarget(null)}
           onConfirm={handleConfirmCheckout}
         />

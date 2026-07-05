@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useClubSettings } from '../hooks/useClubSettings'
 
 const INITIAL_MENU = [
   { id: 1, name: 'Coke',       price: 40, qty: 10, category: 'Drinks' },
@@ -13,12 +14,13 @@ const INITIAL_MENU = [
 const CATEGORIES = ['Drinks', 'Snacks', 'Meals', 'Other']
 const lbl = { fontSize: '0.82rem', color: 'var(--color-text2)', marginBottom: 5, display: 'block' }
 
-function PinGate({ action, onUnlock, onCancel }) {
+function PinGate({ action, onUnlock, onCancel, ownerPin }) {
   const [pin, setPin] = useState('')
   const [err, setErr] = useState(false)
   function verify() {
-    const ownerPin = localStorage.getItem('ct_owner_pin') || '1234'
-    if (pin === ownerPin) onUnlock()
+    // Use Firestore PIN (synced across devices), fallback to localStorage, then default
+    const correctPin = ownerPin || localStorage.getItem('ct_owner_pin') || '1234'
+    if (pin === correctPin) onUnlock()
     else { setErr(true); setPin('') }
   }
   return (
@@ -39,6 +41,7 @@ function PinGate({ action, onUnlock, onCancel }) {
 }
 
 export default function Canteen() {
+  const { settings } = useClubSettings()
   const [menu, setMenu] = useState(INITIAL_MENU)
   const [form,    setForm]    = useState({ name:'', price:'', qty:'', category:'Drinks' })
   const [showAdd, setShowAdd] = useState(false)
@@ -92,7 +95,9 @@ export default function Canteen() {
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'1.25rem', flexWrap:'wrap', gap:'0.75rem' }}>
         <div>
           <h2 style={{ fontFamily:'var(--font-display)', fontWeight:700 }}>Canteen</h2>
-          
+          <p style={{ color:'var(--color-text2)', fontSize:'0.83rem', marginTop:2 }}>
+            Menu items &amp; PIN-protected inventory management
+          </p>
         </div>
         <div style={{ display:'flex', gap:'0.5rem' }}>
           <button onClick={()=>setInventoryState('pending-bulk')} className="btn-ghost" style={{ fontSize:'0.85rem' }}>
@@ -122,12 +127,12 @@ export default function Canteen() {
 
       {/* PIN gates */}
       {inventoryState==='pending-bulk' && (
-        <PinGate action="update all stock quantities"
+        <PinGate action="update all stock quantities" ownerPin={settings.ownerPin}
           onUnlock={()=>setInventoryState('unlocked-bulk')}
           onCancel={()=>setInventoryState('idle')} />
       )}
       {inventoryState.startsWith('pending-item:') && (
-        <PinGate action="edit this item's stock"
+        <PinGate action="edit this item's stock" ownerPin={settings.ownerPin}
           onUnlock={()=>setInventoryState(inventoryState.replace('pending-','unlocked-'))}
           onCancel={()=>setInventoryState('idle')} />
       )}

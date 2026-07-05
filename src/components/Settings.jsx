@@ -99,12 +99,16 @@ export default function Settings() {
     }
   }
 
-  function handleChangePin(e) {
+  async function handleChangePin(e) {
     e.preventDefault()
-    const existing = localStorage.getItem('ct_owner_pin') || '1234'
+    // Read current PIN from Firestore settings (synced across all devices)
+    const existing = settings.ownerPin || '1234'
     if (currentPin !== existing) { setPinMsg('error:Current PIN is incorrect'); return }
     if (newPin.length < 4)       { setPinMsg('error:New PIN must be at least 4 characters'); return }
     if (newPin !== confirmPin)    { setPinMsg('error:PINs do not match'); return }
+    // Save to Firestore — syncs to ALL devices instantly
+    await saveSettings({ ownerPin: newPin })
+    // Also keep localStorage in sync for backward compat
     localStorage.setItem('ct_owner_pin', newPin)
     setPinMsg('success:PIN updated successfully')
     setCurrentPin(''); setNewPin(''); setConfirmPin('')
@@ -191,7 +195,7 @@ export default function Settings() {
           editing inventory stock. Default is <strong>1234</strong>. Set a PIN only you know.
         </p>
         <p style={{ fontSize:'0.75rem', color:'var(--color-text3)', marginBottom:'1rem' }}>
-          Note: PIN is stored on this device only. If you switch devices, you'll need to set it again.
+          PIN is synced across all your devices via Firebase.
         </p>
 
         {!showPinForm ? (
