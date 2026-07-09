@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
+import { doc, updateDoc } from 'firebase/firestore'
+import { db, auth } from '../firebase'
 import { useClubSettings } from '../hooks/useClubSettings'
 import { useTables } from '../hooks/useTables'
+import { useBills } from '../hooks/useBills'
 
 // ── Helpers ───────────────────────────────────────────────────────
 function formatTime(s) {
@@ -748,8 +751,166 @@ function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, ownerPin, on
   )
 }
 
+
+// ── Table Bills Modal ─────────────────────────────────────────────
+// Shows all bills for a specific table today.
+// Owner can settle individual pending bills or settle all at once.
+function TableBillsModal({ table, bills, onClose }) {
+  const [settling, setSettling] = useState(null)
+
+  // Filter: all bills for this table, today
+  const today = new Date()
+  const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`
+  const tableBills = bills
+    .filter(b => b.tableId === String(table.id) && b.createdAt instanceof Date
+      && `${b.createdAt.getFullYear()}-${String(b.createdAt.getMonth()+1).padStart(2,'0')}-${String(b.createdAt.getDate()).padStart(2,'0')}` === todayKey)
+    .sort((a,b) => b.createdAt - a.createdAt)  // newest first
+
+  const totalAmount  = tableBills.reduce((s,b) => s + b.total, 0)
+  const totalPending = tableBills.reduce((s,b) => s + (b.pendingAmount||0), 0)
+
+  async function settleBill(billId) {
+    const uid = auth.currentUser?.uid
+    if (!uid) return
+    setSettling(billId)
+    try {
+      await updateDoc(doc(db, 'clubs', uid, 'bills', billId), {
+        paymentMode:   'cash',
+        pendingAmount: 0,
+        settledAt:     new Date().toISOString(),
+      })
+    } catch(e) {
+      alert('Failed to settle. Try again.')
+    }
+    setSettling(null)
+  }
+
+  async function settleAll() {
+    const pending = tableBills.filter(b => b.paymentMode === 'paid_pending' && (b.pendingAmount||0) > 0)
+    if (!pending.length) return
+    if (!window.confirm(`Settle all ${pending.length} pending bill(s) totalling ₹${Math.round(pending.reduce((s,b)=>s+(b.pendingAmount||0),0))}?`)) return
+    for (const b of pending) await settleBill(b.id)
+  }
+
+  function fmtT(d) {
+    if (!d) return '—'
+    return d.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true })
+  }
+
+  const payTag = {
+    cash:        { label:'Cash',           cls:'tag tag-green'  },
+    upi:         { label:'UPI',            cls:'tag tag-blue'   },
+    split:       { label:'UPI+Cash',       cls:'tag tag-blue'   },
+    paid_pending:{ label:'Partially Paid', cls:'tag tag-amber'  },
+  }
+
+  return (
+    <Modal onClose={onClose}>
+      <div className="card" style={{ width:'100%', maxWidth:560, padding:'1.5rem', maxHeight:'88vh', overflowY:'auto' }}>
+        {/* Header */}
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:'1rem' }}>
+          <div>
+            <h3 style={{ fontFamily:'var(--font-display)', fontWeight:700, fontSize:'1.05rem' }}>
+              {table.name} — Today's Bills
+            </h3>
+            <p style={{ fontSize:'0.78rem', color:'var(--color-text3)', marginTop:3 }}>
+              {tableBills.length} session{tableBills.length !== 1 ? 's' : ''} · Total ₹{Math.round(totalAmount)}
+              {totalPending > 0 && <span style={{ color:'var(--color-red)', marginLeft:8 }}>· ₹{Math.round(totalPending)} pending</span>}
+            </p>
+          </div>
+          {totalPending > 0 && (
+            <button onClick={settleAll} className="btn-primary"
+              style={{ fontSize:'0.78rem', padding:'0.4rem 0.85rem', whiteSpace:'nowrap' }}>
+              Settle all pending
+            </button>
+          )}
+        </div>
+
+        {/* Bill list */}
+        {tableBills.length === 0 ? (
+          <p style={{ color:'var(--color-text3)', textAlign:'center', padding:'2rem 0', fontSize:'0.9rem' }}>
+            No bills for this table today yet.
+          </p>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:'0.6rem' }}>
+            {tableBills.map((b, idx) => {
+              const checkIn  = b.checkInTime  ? new Date(b.checkInTime)  : null
+              const checkOut = b.checkOutTime ? new Date(b.checkOutTime) : b.createdAt
+              const isPending = b.paymentMode === 'paid_pending' && (b.pendingAmount||0) > 0
+              const tag = payTag[b.paymentMode] || { label: b.paymentMode, cls:'tag tag-green' }
+
+              return (
+                <div key={b.id} style={{
+                  background: isPending ? 'rgba(245,158,11,0.05)' : 'var(--color-bg3)',
+                  border: `1px solid ${isPending ? 'rgba(245,158,11,0.25)' : 'var(--color-border)'}`,
+                  borderRadius: 10, padding:'0.9rem 1rem',
+                  display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:'0.75rem',
+                }}>
+                  {/* Left: bill info */}
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', marginBottom:4 }}>
+                      <span style={{ fontFamily:'var(--font-display)', fontWeight:700, fontSize:'0.82rem', color:'var(--color-green)' }}>
+                        #{b.billNumber}
+                      </span>
+                      <span className={tag.cls} style={{ fontSize:'0.66rem' }}>{tag.label}</span>
+                    </div>
+                    <div style={{ fontSize:'0.82rem', color:'var(--color-text)', fontWeight:500, marginBottom:3 }}>
+                      {fmtT(checkIn)} → {fmtT(checkOut)}
+                      <span style={{ color:'var(--color-text3)', marginLeft:8, fontWeight:400 }}>
+                        {Math.floor((b.elapsed||0)/60)}m {(b.elapsed||0)%60}s
+                      </span>
+                    </div>
+                    <div style={{ fontSize:'0.75rem', color:'var(--color-text3)', display:'flex', gap:'0.75rem', flexWrap:'wrap' }}>
+                      {(b.tableCharge||0) > 0 && <span>Table ₹{Math.round(b.tableCharge)}</span>}
+                      {(b.canteenTotal||0) > 0 && <span>Canteen ₹{Math.round(b.canteenTotal)}</span>}
+                      {(b.discount||0) > 0 && <span style={{ color:'var(--color-green)' }}>Discount -₹{Math.round(b.discount)}</span>}
+                      {isPending && <span style={{ color:'var(--color-amber)', fontWeight:600 }}>Pending ₹{Math.round(b.pendingAmount)}</span>}
+                    </div>
+                  </div>
+
+                  {/* Right: total + settle */}
+                  <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'0.4rem', flexShrink:0 }}>
+                    <span style={{ fontFamily:'var(--font-display)', fontWeight:700, fontSize:'1rem', color:'var(--color-green)' }}>
+                      ₹{Math.round(b.total)}
+                    </span>
+                    {isPending && (
+                      <button
+                        onClick={() => settleBill(b.id)}
+                        disabled={settling === b.id}
+                        style={{ fontSize:'0.72rem', padding:'3px 10px', borderRadius:6, border:'1px solid var(--color-green)', background:'var(--color-green-glow)', color:'var(--color-green)', cursor:'pointer', fontWeight:600, opacity: settling===b.id ? 0.6 : 1 }}>
+                        {settling === b.id ? 'Settling...' : `Settle ₹${Math.round(b.pendingAmount)}`}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Footer total */}
+        {tableBills.length > 1 && (
+          <div style={{ marginTop:'1rem', paddingTop:'0.75rem', borderTop:'1px solid var(--color-border)', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+            <span style={{ fontFamily:'var(--font-display)', fontWeight:600, fontSize:'0.9rem', color:'var(--color-text2)' }}>
+              Today total ({tableBills.length} sessions)
+            </span>
+            <span style={{ fontFamily:'var(--font-display)', fontWeight:700, fontSize:'1.1rem', color:'var(--color-green)' }}>
+              ₹{Math.round(totalAmount)}
+            </span>
+          </div>
+        )}
+
+        <button onClick={onClose} className="btn-ghost"
+          style={{ width:'100%', justifyContent:'center', marginTop:'1rem' }}>
+          Close
+        </button>
+      </div>
+    </Modal>
+  )
+}
+
 // ── Table card ────────────────────────────────────────────────────
-function TableCard({ table, onStart, onEditCustomer, onPause, onResume, onEnd, onAddCanteen, onRemoveCanteen, onDelete }) {
+function TableCard({ table, onStart, onEditCustomer, onPause, onResume, onEnd, onAddCanteen, onRemoveCanteen, onDelete, todayBillCount, onShowBills }) {
   const lateSeconds  = (table.lateMinutes || 0) * 60
   const billedCost   = (table.elapsed + lateSeconds) * table.ratePerMin / 60
   const cost         = table.elapsed * table.ratePerMin / 60   // for display timer only
@@ -772,9 +933,20 @@ function TableCard({ table, onStart, onEditCustomer, onPause, onResume, onEnd, o
             <span className="tag tag-blue" style={{ fontSize: '0.68rem' }}>{table.size}</span>
           </div>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.72rem', color: sc, fontFamily: 'var(--font-display)', fontWeight: 600, textTransform: 'capitalize' }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: sc, animation: table.status === 'running' ? 'pulse-dot 1.5s infinite' : 'none' }} />
-          {table.status}
+        <div style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
+          {/* Bill count badge — click to see today's bills for this table */}
+          {todayBillCount > 0 && (
+            <button
+              onClick={onShowBills}
+              title={`${todayBillCount} bill${todayBillCount>1?'s':''} today — click to view`}
+              style={{ width:22, height:22, borderRadius:'50%', background:'var(--color-red)', border:'none', color:'#fff', fontFamily:'var(--font-display)', fontWeight:700, fontSize:'0.72rem', cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
+              {todayBillCount}
+            </button>
+          )}
+          <div style={{ display:'flex', alignItems:'center', gap:'0.3rem', fontSize:'0.72rem', color: sc, fontFamily:'var(--font-display)', fontWeight:600, textTransform:'capitalize' }}>
+            <span style={{ width:6, height:6, borderRadius:'50%', background:sc, animation:table.status==='running'?'pulse-dot 1.5s infinite':'none' }} />
+            {table.status}
+          </div>
         </div>
       </div>
 
@@ -864,6 +1036,7 @@ function TableCard({ table, onStart, onEditCustomer, onPause, onResume, onEnd, o
 // ── Main Tables page ──────────────────────────────────────────────
 export default function Tables() {
   const { settings } = useClubSettings()
+  const { bills } = useBills()
   const {
     tables, loading,
     startTable, pauseTable, resumeTable,
@@ -874,6 +1047,7 @@ export default function Tables() {
   const [editCustomerId,    setEditCustomerId]    = useState(null)
   const [checkoutTarget,    setCheckoutTarget]    = useState(null)
   const [canteenTarget,     setCanteenTarget]     = useState(null)
+  const [billsTarget,       setBillsTarget]       = useState(null)
   const [standaloneCanteen, setStandaloneCanteen] = useState(false)
   const [standaloneItems,   setStandaloneItems]   = useState([])
   const [canteenCheckout,   setCanteenCheckout]   = useState(false)
@@ -884,6 +1058,19 @@ export default function Tables() {
     const iv = setInterval(() => setTick(t => t + 1), 1000)
     return () => clearInterval(iv)
   }, [])
+
+  // Count today's bills per tableId for the badge
+  const todayStr = (() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`
+  })()
+  const todayBillsByTable = bills.reduce((acc, b) => {
+    if (!(b.createdAt instanceof Date)) return acc
+    const dk = `${b.createdAt.getFullYear()}-${String(b.createdAt.getMonth()+1).padStart(2,'0')}-${String(b.createdAt.getDate()).padStart(2,'0')}`
+    if (dk !== todayStr) return acc
+    acc[b.tableId] = (acc[b.tableId] || 0) + 1
+    return acc
+  }, {})
 
   const liveTables = tables.map(t => {
     if (t.status === 'running' && t.startTime) {
@@ -974,6 +1161,8 @@ export default function Tables() {
             onAddCanteen={setCanteenTarget}
             onRemoveCanteen={handleRemoveCanteen}
             onDelete={handleDelete}
+            todayBillCount={todayBillsByTable[table.id] || 0}
+            onShowBills={() => setBillsTarget(table)}
           />
         ))}
       </div>
@@ -1038,6 +1227,14 @@ export default function Tables() {
           ownerPin={settings.ownerPin}
           onClose={() => setCheckoutTarget(null)}
           onConfirm={handleConfirmCheckout}
+        />
+      )}
+
+      {billsTarget && (
+        <TableBillsModal
+          table={billsTarget}
+          bills={bills}
+          onClose={() => setBillsTarget(null)}
         />
       )}
     </div>
