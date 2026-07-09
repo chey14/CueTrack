@@ -109,10 +109,20 @@ function CustomerModal({ table, isEditing, onConfirm, onClose }) {
           </div>
           <div>
             <label style={lbl}>Late check-in (minutes)</label>
-            <input className="input-field" type="number" min="0" placeholder="0"
-              value={lateMinutes} onChange={e => setLateMinutes(parseInt(e.target.value) || 0)} />
+            {isEditing && table.lateMinutes > 0 ? (
+              // Already set — locked, cannot be changed again
+              <div style={{ display:'flex', alignItems:'center', gap:'0.6rem' }}>
+                <div className="input-field" style={{ opacity:0.6, cursor:'not-allowed', color:'var(--color-text2)' }}>
+                  {table.lateMinutes} min
+                </div>
+                <span style={{ fontSize:'0.72rem', color:'var(--color-amber)', whiteSpace:'nowrap' }}>🔒 Cannot change once set</span>
+              </div>
+            ) : (
+              <input className="input-field" type="number" min="0" placeholder="0"
+                value={lateMinutes} onChange={e => setLateMinutes(parseInt(e.target.value) || 0)} />
+            )}
             <p style={{ fontSize: '0.72rem', color: 'var(--color-text3)', marginTop: 3 }}>
-              Extra time to charge — not shown on bill.
+              Extra time to charge — not shown on bill. Can only be set once.
             </p>
           </div>
         </div>
@@ -404,7 +414,7 @@ function DiscountSection({ subtotal, discountAmt, setDiscountAmt, ownerPin }) {
 
 // ── Canteen Checkout Modal (standalone — no table) ────────────────
 function CanteenCheckoutModal({ items, upiId, upiQrBase64, upiQrUrl, clubName, ownerPin, onClose, onConfirm }) {
-  const [paymentMode,    setPaymentMode]    = useState('cash')
+  const [paymentMode,    setPaymentMode]    = useState('upi')
   const [cashAmt,        setCashAmt]        = useState('')
   const [upiAmt,         setUpiAmt]         = useState('')
   const [customerName,   setCustomerName]   = useState('')
@@ -539,7 +549,7 @@ function CanteenCheckoutModal({ items, upiId, upiQrBase64, upiQrUrl, clubName, o
 
 // ── Table Checkout Modal ──────────────────────────────────────────
 function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, ownerPin, onClose, onConfirm }) {
-  const [paymentMode, setPaymentMode] = useState('cash')
+  const [paymentMode, setPaymentMode] = useState('upi')
   const [cashAmt,     setCashAmt]     = useState('')
   const [upiAmt,      setUpiAmt]      = useState('')
   const [discountAmt,       setDiscountAmt]       = useState(0)
@@ -740,7 +750,9 @@ function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, ownerPin, on
 
 // ── Table card ────────────────────────────────────────────────────
 function TableCard({ table, onStart, onEditCustomer, onPause, onResume, onEnd, onAddCanteen, onRemoveCanteen, onDelete }) {
-  const cost         = table.elapsed * table.ratePerMin / 60
+  const lateSeconds  = (table.lateMinutes || 0) * 60
+  const billedCost   = (table.elapsed + lateSeconds) * table.ratePerMin / 60
+  const cost         = table.elapsed * table.ratePerMin / 60   // for display timer only
   const canteenTotal = table.canteen.reduce((s, i) => s + i.price, 0)
 
   const statusColor = { available: 'var(--color-green)', running: 'var(--color-amber)', paused: 'var(--color-blue)' }
@@ -785,16 +797,23 @@ function TableCard({ table, onStart, onEditCustomer, onPause, onResume, onEnd, o
         </div>
       )}
 
-      {/* Timer */}
+      {/* Timer — shows actual elapsed. Below shows billed time if late check-in applied */}
       <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '2.4rem', letterSpacing: '-0.02em', color: table.status === 'available' ? 'var(--color-text3)' : 'var(--color-text)', marginBottom: '0.2rem', animation: table.status === 'running' ? 'tick 1s infinite' : 'none' }}>
         {formatTimerDisplay(table.elapsed)}
       </div>
 
-      {/* Cost */}
+      {/* Late check-in indicator — shown immediately after edit */}
+      {table.status !== 'available' && table.lateMinutes > 0 && (
+        <div style={{ fontSize: '0.75rem', color: 'var(--color-amber)', marginBottom: '0.2rem', fontWeight: 500 }}>
+          ⏱ +{table.lateMinutes}m late · billed {formatTimerDisplay(table.elapsed + table.lateMinutes * 60)}
+        </div>
+      )}
+
+      {/* Cost — uses billedSeconds (elapsed + late) for accurate amount */}
       <div style={{ fontSize: '0.95rem', fontFamily: 'var(--font-display)', fontWeight: 600, color: table.status === 'available' ? 'var(--color-text3)' : 'var(--color-amber)', marginBottom: '0.25rem' }}>
         {table.status === 'available'
           ? `₹${Math.round(table.ratePerMin * 60)}/hr`
-          : `${fmtRound(cost + canteenTotal)}${canteenTotal > 0 ? ` (incl. ₹${Math.round(canteenTotal)} canteen)` : ''}`}
+          : `${fmtRound(billedCost + canteenTotal)}${canteenTotal > 0 ? ` (incl. ₹${Math.round(canteenTotal)} canteen)` : ''}`}
       </div>
 
       {/* Canteen items with delete */}
@@ -915,7 +934,7 @@ export default function Tables() {
     { label: 'Available',   value: liveTables.filter(t => t.status === 'available').length,  color: 'var(--color-green)' },
     { label: 'Running',     value: liveTables.filter(t => t.status === 'running').length,    color: 'var(--color-amber)' },
     { label: 'Paused',      value: liveTables.filter(t => t.status === 'paused').length,     color: 'var(--color-blue)'  },
-    { label: 'Earning now', value: '₹' + Math.round(liveTables.reduce((s, t) => s + (t.elapsed * t.ratePerMin / 60) + t.canteen.reduce((c, i) => c + i.price, 0), 0)), color: 'var(--color-text)' },
+    { label: 'Earning now', value: '₹' + Math.round(liveTables.reduce((s, t) => s + ((t.elapsed + (t.lateMinutes||0)*60) * t.ratePerMin / 60) + t.canteen.reduce((c, i) => c + i.price, 0), 0)), color: 'var(--color-text)' },
   ]
 
   if (loading) {

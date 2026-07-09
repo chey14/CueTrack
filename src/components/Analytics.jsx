@@ -102,10 +102,17 @@ export default function Analytics() {
       .sort((a,b)=>b.revenue-a.revenue)
 
     // Payment breakdown this month — all 4 modes + total pending amount
+    // For UPI+Cash (split): the cash component ALSO adds to cash total,
+    // and the UPI component ALSO adds to UPI total — so owner sees true cash-in-hand
     const payments = { cash:0, upi:0, split:0, paid_pending:0, pending_total:0 }
     ;(byMonth[thisMonthKey]||[]).forEach(b => {
-      payments[b.paymentMode] = (payments[b.paymentMode]||0)+b.total
-      if (b.paymentMode==='paid_pending') payments.pending_total += (b.pendingAmount||0)
+      payments[b.paymentMode] = (payments[b.paymentMode]||0) + b.total
+      if (b.paymentMode === 'paid_pending') payments.pending_total += (b.pendingAmount||0)
+      // Add split components to their respective totals too
+      if (b.paymentMode === 'split') {
+        payments.cash += (b.cashAmount||0)
+        payments.upi  += (b.upiAmount||0)
+      }
     })
 
     // Table vs canteen revenue split — today and this month
@@ -115,12 +122,21 @@ export default function Analytics() {
     const monthTableRev   = monthBillsAll.reduce((s,b)=>s+(b.tableCharge||0),0)
     const monthCanteenRev = monthBillsAll.reduce((s,b)=>s+(b.canteenTotal||0),0)
 
+    // Today's payment breakdown — all 4 modes
+    // For UPI+Cash (split): cash component also counted in cash, upi component in upi
+    const todayPayments = { cash:0, upi:0, split:0, paid_pending:0, pending_total:0 }
+    todayBills.forEach(b => {
+      todayPayments[b.paymentMode] = (todayPayments[b.paymentMode]||0) + b.total
+      if (b.paymentMode === 'paid_pending') todayPayments.pending_total += (b.pendingAmount||0)
+    })
+
     // Sorted date keys for history (newest first)
     const sortedDateKeys = Object.keys(byDate).sort((a,b)=>b.localeCompare(a))
 
     return {
       todayRevenue, todaySessions, todayChange, yesterdayRevenue,
       todayTableRev, todayCanteenRev, monthTableRev, monthCanteenRev,
+      todayPayments,
       last6, thisMonthRevenue, lastMonthRevenue, avgRevenue,
       projected: avgRevenue*12, pctChange,
       hourBuckets, tablePerf, payments, byDate, sortedDateKeys,
@@ -252,7 +268,7 @@ export default function Analytics() {
     )
   }
 
-  const { todayRevenue, todaySessions, todayChange, yesterdayRevenue, todayTableRev, todayCanteenRev, monthTableRev, monthCanteenRev, last6, thisMonthRevenue, lastMonthRevenue, avgRevenue, projected, pctChange, hourBuckets, tablePerf, payments, byDate, sortedDateKeys } = analytics
+  const { todayRevenue, todaySessions, todayChange, yesterdayRevenue, todayTableRev, todayCanteenRev, monthTableRev, monthCanteenRev, todayPayments, last6, thisMonthRevenue, lastMonthRevenue, avgRevenue, projected, pctChange, hourBuckets, tablePerf, payments, byDate, sortedDateKeys } = analytics
 
   const tabStyle = (t) => ({
     padding:'0.45rem 0.9rem',borderRadius:6,border:'none',cursor:'pointer',
@@ -323,6 +339,32 @@ export default function Analytics() {
                 <div style={{ fontSize:'0.72rem',color:'var(--color-text3)' }}>{k.sub}</div>
               </div>
             ))}
+          </div>
+
+          {/* Today: payment breakdown */}
+          <div className="card" style={{ padding:'1.25rem' }}>
+            <h3 style={{ fontFamily:'var(--font-display)',fontWeight:600,fontSize:'0.95rem',marginBottom:'0.85rem' }}>
+              Today's payments
+            </h3>
+            <div style={{ display:'grid',gridTemplateColumns:'1fr 1fr',gap:'0.6rem',marginBottom:'0.6rem' }}>
+              {[
+                ['cash',        'Cash',            'var(--color-green)'],
+                ['upi',         'UPI',             'var(--color-blue)'],
+                ['split',       'UPI+Cash',        'var(--color-blue)'],
+                ['paid_pending','Partially Paid',  'var(--color-amber)'],
+              ].map(([key,label,color]) => (
+                <div key={key} style={{ background:'var(--color-bg3)',borderRadius:8,padding:'0.85rem' }}>
+                  <div style={{ fontSize:'0.72rem',color:'var(--color-text3)',marginBottom:4 }}>{label}</div>
+                  <div style={{ fontFamily:'var(--font-display)',fontWeight:700,fontSize:'1.05rem',color }}>{inr(Math.round(todayPayments[key]||0))}</div>
+                </div>
+              ))}
+            </div>
+            {(todayPayments.pending_total||0) > 0 && (
+              <div style={{ background:'rgba(239,68,68,0.06)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:8,padding:'0.7rem 0.85rem',display:'flex',justifyContent:'space-between',alignItems:'center' }}>
+                <span style={{ fontSize:'0.82rem',color:'var(--color-text2)' }}>⚠ Outstanding today</span>
+                <span style={{ fontFamily:'var(--font-display)',fontWeight:700,color:'var(--color-red)' }}>{inr(Math.round(todayPayments.pending_total))}</span>
+              </div>
+            )}
           </div>
 
           {/* This month: table vs canteen split */}
@@ -397,7 +439,7 @@ export default function Analytics() {
             {(() => {
               const peak = hourBuckets.indexOf(Math.max(...hourBuckets))
               const pl = peak<12?`${peak}am`:peak===12?'12pm':`${peak-12}pm`
-              return <p style={{ fontSize:'0.75rem',color:'var(--color-text3)',marginTop:'0.4rem' }}>🔥 Peak hour: {pl}</p>
+              return <p style={{ fontSize:'0.75rem',color:'var(--color-text3)',marginTop:'0.4rem' }}>Peak hour: {pl}</p>
             })()}
           </div>
 
