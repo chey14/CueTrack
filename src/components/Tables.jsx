@@ -797,15 +797,16 @@ function TableCard({ table, onStart, onEditCustomer, onPause, onResume, onEnd, o
         </div>
       )}
 
-      {/* Timer — shows actual elapsed. Below shows billed time if late check-in applied */}
+      {/* Timer — shows billedTime (elapsed + late) if late check-in is set,
+           otherwise shows elapsed. This is also what drives the delete guard. */}
       <div style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '2.4rem', letterSpacing: '-0.02em', color: table.status === 'available' ? 'var(--color-text3)' : 'var(--color-text)', marginBottom: '0.2rem', animation: table.status === 'running' ? 'tick 1s infinite' : 'none' }}>
-        {formatTimerDisplay(table.elapsed)}
+        {formatTimerDisplay(table.elapsed + (table.lateMinutes||0)*60)}
       </div>
 
-      {/* Late check-in indicator — shown immediately after edit */}
+      {/* Show late indicator so owner knows why timer is higher */}
       {table.status !== 'available' && table.lateMinutes > 0 && (
-        <div style={{ fontSize: '0.75rem', color: 'var(--color-amber)', marginBottom: '0.2rem', fontWeight: 500 }}>
-          ⏱ +{table.lateMinutes}m late · billed {formatTimerDisplay(table.elapsed + table.lateMinutes * 60)}
+        <div style={{ fontSize: '0.72rem', color: 'var(--color-amber)', marginBottom: '0.2rem', fontWeight: 500 }}>
+          ⏱ includes +{table.lateMinutes}m late check-in
         </div>
       )}
 
@@ -844,7 +845,7 @@ function TableCard({ table, onStart, onEditCustomer, onPause, onResume, onEnd, o
             <button onClick={() => onPause(table.id)} className="btn-ghost" style={{ flex: 1, justifyContent: 'center', padding: '0.5rem', fontSize: '0.85rem' }}>⏸ Pause</button>
             <button onClick={() => onAddCanteen(table.id)} className="btn-ghost" style={{ flex: 'none', padding: '0.5rem 0.7rem', fontSize: '0.85rem' }}>🍟</button>
             <button onClick={() => onEnd(table.id)} style={{ flex: 1, padding: '0.5rem', borderRadius: 8, border: '1px solid rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.08)', color: 'var(--color-red)', fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}>■ End</button>
-            <button onClick={() => onDelete(table.id, table.elapsed)} title="Delete session (only if < 3 min)" style={{ flex: 'none', padding: '0.5rem 0.6rem', borderRadius: 8, border: '1px solid rgba(239,68,68,0.25)', background: 'transparent', color: 'rgba(239,68,68,0.5)', cursor: 'pointer', fontSize: '0.8rem' }}>🗑</button>
+            <button onClick={() => onDelete(table.id, table.elapsed + (table.lateMinutes||0)*60)} title="Delete session (only if < 3 min)" style={{ flex: 'none', padding: '0.5rem 0.6rem', borderRadius: 8, border: '1px solid rgba(239,68,68,0.25)', background: 'transparent', color: 'rgba(239,68,68,0.5)', cursor: 'pointer', fontSize: '0.8rem' }}>🗑</button>
           </>
         )}
         {table.status === 'paused' && (
@@ -852,7 +853,7 @@ function TableCard({ table, onStart, onEditCustomer, onPause, onResume, onEnd, o
             <button onClick={() => onResume(table.id)} className="btn-primary" style={{ flex: 1, justifyContent: 'center', padding: '0.5rem', fontSize: '0.85rem' }}>▶ Resume</button>
             <button onClick={() => onAddCanteen(table.id)} className="btn-ghost" style={{ flex: 'none', padding: '0.5rem 0.7rem', fontSize: '0.85rem' }}>🍟</button>
             <button onClick={() => onEnd(table.id)} style={{ flex: 'none', padding: '0.5rem 0.85rem', borderRadius: 8, border: '1px solid rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.08)', color: 'var(--color-red)', fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}>■ End</button>
-            <button onClick={() => onDelete(table.id, table.elapsed)} title="Delete session (only if < 3 min)" style={{ flex: 'none', padding: '0.5rem 0.6rem', borderRadius: 8, border: '1px solid rgba(239,68,68,0.25)', background: 'transparent', color: 'rgba(239,68,68,0.5)', cursor: 'pointer', fontSize: '0.8rem' }}>🗑</button>
+            <button onClick={() => onDelete(table.id, table.elapsed + (table.lateMinutes||0)*60)} title="Delete session (only if < 3 min)" style={{ flex: 'none', padding: '0.5rem 0.6rem', borderRadius: 8, border: '1px solid rgba(239,68,68,0.25)', background: 'transparent', color: 'rgba(239,68,68,0.5)', cursor: 'pointer', fontSize: '0.8rem' }}>🗑</button>
           </>
         )}
       </div>
