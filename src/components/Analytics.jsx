@@ -123,11 +123,15 @@ export default function Analytics() {
     const monthCanteenRev = monthBillsAll.reduce((s,b)=>s+(b.canteenTotal||0),0)
 
     // Today's payment breakdown — all 4 modes
-    // For UPI+Cash (split): cash component also counted in cash, upi component in upi
+    // For UPI+Cash (split): cash component ALSO adds to cash, upi component ALSO adds to upi
     const todayPayments = { cash:0, upi:0, split:0, paid_pending:0, pending_total:0 }
     todayBills.forEach(b => {
       todayPayments[b.paymentMode] = (todayPayments[b.paymentMode]||0) + b.total
       if (b.paymentMode === 'paid_pending') todayPayments.pending_total += (b.pendingAmount||0)
+      if (b.paymentMode === 'split') {
+        todayPayments.cash += (b.cashAmount||0)
+        todayPayments.upi  += (b.upiAmount||0)
+      }
     })
 
     // Sorted date keys for history (newest first)
@@ -439,7 +443,7 @@ export default function Analytics() {
             {(() => {
               const peak = hourBuckets.indexOf(Math.max(...hourBuckets))
               const pl = peak<12?`${peak}am`:peak===12?'12pm':`${peak-12}pm`
-              return <p style={{ fontSize:'0.75rem',color:'var(--color-text3)',marginTop:'0.4rem' }}>Peak hour: {pl}</p>
+              return <p style={{ fontSize:'0.75rem',color:'var(--color-text3)',marginTop:'0.4rem' }}>🔥 Peak hour: {pl}</p>
             })()}
           </div>
 
