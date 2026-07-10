@@ -773,10 +773,14 @@ function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, ownerPin, on
 // ── Table Bills Modal ─────────────────────────────────────────────
 // Shows all bills for a specific table today.
 // Owner can settle individual pending bills or settle all at once.
-function TableBillsModal({ table, bills, onClose }) {
-  const [settling,       setSettling]       = useState(null)   // billId being settled
-  const [settlePayMode,  setSettlePayMode]  = useState({})     // { [billId]: 'cash'|'upi'|'split' }
-  const [confirmingId,   setConfirmingId]   = useState(null)   // billId showing payment picker
+function TableBillsModal({ table, bills, ownerPin, onClose }) {
+  const [settling,       setSettling]       = useState(null)
+  const [settlePayMode,  setSettlePayMode]  = useState({})
+  const [confirmingId,   setConfirmingId]   = useState(null)
+  // Discount per bill — hidden, revealed by triple-clicking the bill total
+  const [discountState,  setDiscountState]  = useState({})
+  // { [billId]: { clicks:0, pinShown:false, pinVal:'', pinErr:false, unlocked:false, amt:0 } }
+  const clickTimers = {}  // reset click counter after 800ms
 
   // Filter: all bills for this table, today
   const today = new Date()
@@ -826,6 +830,51 @@ function TableBillsModal({ table, bills, onClose }) {
     if (!window.confirm(`Settle all ${tableBills.length} bill(s) totalling ₹${totalAmt}?\nPayment mode for each will be what was selected, or Cash by default.`)) return
     for (const b of tableBills) {
       await settleBill(b.id, settlePayMode[b.id] || 'cash')
+    }
+  }
+
+  // ── Discount helpers ─────────────────────────────────────
+  function ds(billId) {
+    return discountState[billId] || { clicks:0, pinShown:false, pinVal:'', pinErr:false, unlocked:false, amt:0 }
+  }
+  function setDs(billId, patch) {
+    setDiscountState(p => ({ ...p, [billId]: { ...ds(billId), ...patch } }))
+  }
+
+  // Triple-click on bill total to reveal discount PIN
+  function handleTotalClick(billId) {
+    const current = ds(billId)
+    const newClicks = (current.clicks || 0) + 1
+    setDs(billId, { clicks: newClicks })
+    // Reset counter after 800ms of inactivity
+    clearTimeout(clickTimers[billId])
+    clickTimers[billId] = setTimeout(() => setDs(billId, { clicks: 0 }), 800)
+    if (newClicks >= 3) {
+      setDs(billId, { clicks: 0, pinShown: true })
+    }
+  }
+
+  function verifyDiscountPin(billId, pinVal) {
+    const correct = ownerPin || localStorage.getItem('ct_owner_pin') || '1234'
+    if (pinVal === correct) {
+      setDs(billId, { pinShown: true, unlocked: true, pinErr: false, pinVal: '' })
+    } else {
+      setDs(billId, { pinErr: true, pinVal: '' })
+    }
+  }
+
+  async function applyDiscount(billId, originalTotal, discountAmt) {
+    const uid = auth.currentUser?.uid
+    if (!uid || !discountAmt || discountAmt <= 0) return
+    const newTotal = Math.max(0, Math.round(originalTotal) - Math.round(discountAmt))
+    try {
+      await updateDoc(doc(db, 'clubs', uid, 'bills', billId), {
+        discount: Math.round(discountAmt),
+        total:    newTotal,
+      })
+      setDs(billId, { unlocked: false, pinShown: false, amt: 0, clicks: 0 })
+    } catch(e) {
+      alert('Failed to apply discount. Try again.')
     }
   }
 
@@ -907,8 +956,12 @@ function TableBillsModal({ table, bills, onClose }) {
 
                   {/* Right: total + settle */}
                   <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'0.5rem', flexShrink:0 }}>
-                    <span style={{ fontFamily:'var(--font-display)', fontWeight:700, fontSize:'1rem', color:'var(--color-green)' }}>
+                    <span
+                      onClick={() => handleTotalClick(b.id)}
+                      title="Triple-click to apply discount"
+                      style={{ fontFamily:'var(--font-display)', fontWeight:700, fontSize:'1rem', color:'var(--color-green)', cursor:'default', userSelect:'none' }}>
                       ₹{Math.round(b.total)}
+                      {(b.discount||0) > 0 && <span style={{ fontSize:'0.7rem', color:'var(--color-text3)', marginLeft:4 }}>(-₹{Math.round(b.discount)})</span>}
                     </span>
 
                     {confirmingId === b.id ? (
@@ -959,8 +1012,51 @@ function TableBillsModal({ table, bills, onClose }) {
                         Settle ₹{Math.round(b.total)}
                       </button>
                     )}
-                  </div>
+                  {/* Hidden discount — triple-click bill total to reveal */}
+                  {ds(b.id).pinShown && !ds(b.id).unlocked && (
+                    <div style={{ marginTop:'0.4rem', display:'flex', gap:'0.4rem', alignItems:'center' }}>
+                      <input
+                        type="password" placeholder="PIN" maxLength={8}
+                        value={ds(b.id).pinVal || ''}
+                        onChange={e => setDs(b.id, { pinVal: e.target.value, pinErr: false })}
+                        onKeyDown={e => e.key==='Enter' && verifyDiscountPin(b.id, ds(b.id).pinVal)}
+                        style={{ width:80, padding:'3px 7px', borderRadius:5, border:`1px solid ${ds(b.id).pinErr?'var(--color-red)':'var(--color-border)'}`, background:'var(--color-bg2)', color:'var(--color-text)', fontSize:'0.78rem' }}
+                        autoFocus
+                      />
+                      <button onClick={() => verifyDiscountPin(b.id, ds(b.id).pinVal)}
+                        style={{ padding:'3px 8px', borderRadius:5, fontSize:'0.72rem', border:'1px solid var(--color-border)', background:'var(--color-bg3)', color:'var(--color-text2)', cursor:'pointer' }}>
+                        Unlock
+                      </button>
+                      <button onClick={() => setDs(b.id, { pinShown:false, clicks:0 })}
+                        style={{ background:'none', border:'none', color:'var(--color-text3)', cursor:'pointer', fontSize:'0.78rem' }}>✕</button>
+                      {ds(b.id).pinErr && <span style={{ fontSize:'0.7rem', color:'var(--color-red)' }}>Wrong PIN</span>}
+                    </div>
+                  )}
+                  {ds(b.id).unlocked && (
+                    <div style={{ marginTop:'0.4rem', display:'flex', gap:'0.4rem', alignItems:'center', flexWrap:'wrap' }}>
+                      <span style={{ fontSize:'0.75rem', color:'var(--color-text3)' }}>Discount ₹:</span>
+                      <input
+                        type="number" min="0" max={b.total} placeholder="0"
+                        value={ds(b.id).amt || ''}
+                        onChange={e => setDs(b.id, { amt: parseFloat(e.target.value)||0 })}
+                        style={{ width:70, padding:'3px 6px', borderRadius:5, border:'1px solid var(--color-amber)', background:'var(--color-bg2)', color:'var(--color-text)', fontSize:'0.82rem', fontWeight:600 }}
+                      />
+                      <button
+                        onClick={() => applyDiscount(b.id, b.total, ds(b.id).amt)}
+                        style={{ padding:'3px 8px', borderRadius:5, fontSize:'0.72rem', border:'1px solid var(--color-green)', background:'var(--color-green-glow)', color:'var(--color-green)', cursor:'pointer', fontWeight:600 }}>
+                        Apply
+                      </button>
+                      <button onClick={() => setDs(b.id, { unlocked:false, pinShown:false, amt:0 })}
+                        style={{ background:'none', border:'none', color:'var(--color-text3)', cursor:'pointer', fontSize:'0.78rem' }}>✕</button>
+                      {ds(b.id).amt > 0 && (
+                        <span style={{ fontSize:'0.7rem', color:'var(--color-amber)' }}>
+                          New total: ₹{Math.max(0, Math.round(b.total) - Math.round(ds(b.id).amt))}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
+               </div>
               )
             })}
           </div>
@@ -1324,6 +1420,7 @@ export default function Tables() {
         <TableBillsModal
           table={billsTarget}
           bills={bills}
+          ownerPin={settings.ownerPin}
           onClose={() => setBillsTarget(null)}
         />
       )}
