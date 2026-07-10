@@ -103,7 +103,9 @@ export function useTables(settingsTables) {
   }
 
   // ── Table checkout ────────────────────────────────────────────
-  async function checkoutTable(table, billData) {
+  // settled=true  → Confirm (paid now, badge count stays 0)
+  // settled=false → Save   (unsettled tab, badge count goes up)
+  async function checkoutTable(table, billData, settled = true) {
     if (!uid()) return
 
     const now           = Date.now()
@@ -135,6 +137,7 @@ export function useTables(settingsTables) {
       customer:     table.customer ?? null,
       checkInTime:  checkInTime.toISOString(),
       checkOutTime: checkOutTime.toISOString(),
+      settled:      settled,   // false = Save (collect later), true = Confirm (paid now)
       createdAt:    serverTimestamp(),
     })
 
