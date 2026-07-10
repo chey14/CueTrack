@@ -780,7 +780,7 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
   // Discount per bill — hidden, revealed by triple-clicking the bill total
   const [discountState,  setDiscountState]  = useState({})
   // { [billId]: { clicks:0, pinShown:false, pinVal:'', pinErr:false, unlocked:false, amt:0 } }
-  const clickTimers = {}  // reset click counter after 800ms
+  const clickTimers = {}  // reset click counter after 8000ms
 
   // Filter: all bills for this table, today
   const today = new Date()
@@ -846,9 +846,9 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
     const current = ds(billId)
     const newClicks = (current.clicks || 0) + 1
     setDs(billId, { clicks: newClicks })
-    // Reset counter after 800ms of inactivity
+    // Reset counter after 8000ms of inactivity
     clearTimeout(clickTimers[billId])
-    clickTimers[billId] = setTimeout(() => setDs(billId, { clicks: 0 }), 800)
+    clickTimers[billId] = setTimeout(() => setDs(billId, { clicks: 0 }), 8000)
     if (newClicks >= 3) {
       setDs(billId, { clicks: 0, pinShown: true })
     }
