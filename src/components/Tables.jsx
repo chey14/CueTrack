@@ -774,7 +774,9 @@ function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, ownerPin, on
 // Shows all bills for a specific table today.
 // Owner can settle individual pending bills or settle all at once.
 function TableBillsModal({ table, bills, onClose }) {
-  const [settling, setSettling] = useState(null)
+  const [settling,       setSettling]       = useState(null)   // billId being settled
+  const [settlePayMode,  setSettlePayMode]  = useState({})     // { [billId]: 'cash'|'upi'|'split' }
+  const [confirmingId,   setConfirmingId]   = useState(null)   // billId showing payment picker
 
   // Filter: all bills for this table, today
   const today = new Date()
@@ -789,27 +791,42 @@ function TableBillsModal({ table, bills, onClose }) {
   const totalAmount  = tableBills.reduce((s,b) => s + b.total, 0)
   const totalPending = tableBills.reduce((s,b) => s + (b.pendingAmount||0), 0)
 
-  async function settleBill(billId) {
+  async function settleBill(billId, paymentMode) {
     const uid = auth.currentUser?.uid
     if (!uid) return
     setSettling(billId)
     try {
       await updateDoc(doc(db, 'clubs', uid, 'bills', billId), {
-        settled:       true,    // marks as paid — badge count goes down
-        settledAt:     new Date().toISOString(),
+        settled:     true,
+        paymentMode: paymentMode || 'cash',   // save the chosen payment mode
+        settledAt:   new Date().toISOString(),
       })
     } catch(e) {
       alert('Failed to settle. Try again.')
     }
     setSettling(null)
+    setConfirmingId(null)
+  }
+
+  // Opens the payment picker for a specific bill
+  function startSettle(billId) {
+    setConfirmingId(billId)
+    // Default to the bill's original payment mode
+    const bill = tableBills.find(b => b.id === billId)
+    setSettlePayMode(prev => ({ ...prev, [billId]: bill?.paymentMode || 'cash' }))
+  }
+
+  function cancelSettle(billId) {
+    setConfirmingId(null)
   }
 
   async function settleAll() {
-    // Settle all unsettled bills for this table
     if (!tableBills.length) return
     const totalAmt = Math.round(tableBills.reduce((s,b)=>s+b.total,0))
-    if (!window.confirm(`Settle all ${tableBills.length} bill(s) — Total ₹${totalAmt}?`)) return
-    for (const b of tableBills) await settleBill(b.id)
+    if (!window.confirm(`Settle all ${tableBills.length} bill(s) totalling ₹${totalAmt}?\nPayment mode for each will be what was selected, or Cash by default.`)) return
+    for (const b of tableBills) {
+      await settleBill(b.id, settlePayMode[b.id] || 'cash')
+    }
   }
 
   function fmtT(d) {
@@ -889,16 +906,57 @@ function TableBillsModal({ table, bills, onClose }) {
                   </div>
 
                   {/* Right: total + settle */}
-                  <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'0.4rem', flexShrink:0 }}>
+                  <div style={{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'0.5rem', flexShrink:0 }}>
                     <span style={{ fontFamily:'var(--font-display)', fontWeight:700, fontSize:'1rem', color:'var(--color-green)' }}>
                       ₹{Math.round(b.total)}
                     </span>
-                    {true && (
+
+                    {confirmingId === b.id ? (
+                      /* Payment mode picker — shown when Settle is tapped */
+                      <div style={{ display:'flex', flexDirection:'column', gap:'0.4rem', alignItems:'flex-end' }}>
+                        {/* Payment mode buttons */}
+                        <div style={{ display:'flex', gap:4 }}>
+                          {[['cash','Cash'],['upi','UPI'],['split','UPI+Cash']].map(([mode, label]) => (
+                            <button key={mode}
+                              onClick={() => setSettlePayMode(p => ({...p, [b.id]: mode}))}
+                              style={{
+                                padding:'3px 8px', borderRadius:5, fontSize:'0.7rem',
+                                fontFamily:'var(--font-display)', fontWeight:600, cursor:'pointer',
+                                border: (settlePayMode[b.id]||'cash') === mode
+                                  ? '1px solid var(--color-green)'
+                                  : '1px solid var(--color-border)',
+                                background: (settlePayMode[b.id]||'cash') === mode
+                                  ? 'var(--color-green-glow)'
+                                  : 'transparent',
+                                color: (settlePayMode[b.id]||'cash') === mode
+                                  ? 'var(--color-green)'
+                                  : 'var(--color-text3)',
+                              }}>
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        {/* Confirm / Cancel */}
+                        <div style={{ display:'flex', gap:4 }}>
+                          <button onClick={() => cancelSettle(b.id)}
+                            style={{ padding:'3px 8px', borderRadius:5, fontSize:'0.7rem', border:'1px solid var(--color-border)', background:'transparent', color:'var(--color-text3)', cursor:'pointer' }}>
+                            Cancel
+                          </button>
+                          <button
+                            onClick={() => settleBill(b.id, settlePayMode[b.id] || 'cash')}
+                            disabled={settling === b.id}
+                            style={{ padding:'3px 10px', borderRadius:5, fontSize:'0.72rem', border:'1px solid var(--color-green)', background:'var(--color-green-glow)', color:'var(--color-green)', cursor:'pointer', fontWeight:700, opacity: settling===b.id ? 0.6 : 1 }}>
+                            {settling === b.id ? '...' : '✓ Confirm'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Normal settle button */
                       <button
-                        onClick={() => settleBill(b.id)}
+                        onClick={() => startSettle(b.id)}
                         disabled={settling === b.id}
-                        style={{ fontSize:'0.72rem', padding:'3px 10px', borderRadius:6, border:'1px solid var(--color-green)', background:'var(--color-green-glow)', color:'var(--color-green)', cursor:'pointer', fontWeight:600, opacity: settling===b.id ? 0.6 : 1 }}>
-                        {settling === b.id ? 'Settling...' : `Settle ₹${Math.round(b.total)}`}
+                        style={{ fontSize:'0.72rem', padding:'3px 10px', borderRadius:6, border:'1px solid var(--color-green)', background:'var(--color-green-glow)', color:'var(--color-green)', cursor:'pointer', fontWeight:600 }}>
+                        Settle ₹{Math.round(b.total)}
                       </button>
                     )}
                   </div>
