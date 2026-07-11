@@ -575,6 +575,11 @@ export default function Analytics() {
                             {b.canteenTotal>0 && b.billType!=='canteen' && <span style={{ color:'var(--color-text2)' }}>Canteen ₹{Math.round(b.canteenTotal)}</span>}
                             {b.discount>0 && <span style={{ color:'var(--color-green)',fontWeight:600 }}>Discount -₹{Math.round(b.discount)}</span>}
                             {b.paymentMode==='paid_pending' && b.pendingAmount>0 && <span style={{ color:'var(--color-red)',fontWeight:600 }}>Pending ₹{Math.round(b.pendingAmount)}</span>}
+                            {b.paymentMode==='split' && (b.cashAmount||0)>0 && (b.upiAmount||0)>0 && (
+                              <span style={{ color:'var(--color-text3)' }}>
+                                Cash ₹{Math.round(b.cashAmount)} · UPI ₹{Math.round(b.upiAmount)}
+                              </span>
+                            )}
                           </div>
                         </div>
                         {/* Right: payment tag + amount — sits right next to content */}
