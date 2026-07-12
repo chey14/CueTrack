@@ -777,12 +777,14 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
   const [settling,       setSettling]       = useState(null)
   const [settlePayMode,  setSettlePayMode]  = useState({})
   const [confirmingId,   setConfirmingId]   = useState(null)
+  // Split amounts per bill: { [billId]: { cash: '', upi: '' } }
+  const [settleSplit,    setSettleSplit]    = useState({})
   // Discount per bill — hidden, revealed by triple-clicking the bill total
   const [discountState,  setDiscountState]  = useState({})
   // { [billId]: { clicks:0, pinShown:false, pinVal:'', pinErr:false, unlocked:false, amt:0 } }
-  const clickTimers = {}  // reset click counter after 800000000ms
+  const clickTimers = {}  // reset click counter after 800ms
 
-  // Filter: all bills for this table, today  
+  // Filter: all bills for this table, today
   const today = new Date()
   const todayKey = `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`
   const tableBills = bills
@@ -795,16 +797,31 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
   const totalAmount  = tableBills.reduce((s,b) => s + b.total, 0)
   const totalPending = tableBills.reduce((s,b) => s + (b.pendingAmount||0), 0)
 
-  async function settleBill(billId, paymentMode) {
+  async function settleBill(billId, paymentMode, splitAmts) {
     const uid = auth.currentUser?.uid
     if (!uid) return
+    // Validate split amounts if UPI+Cash selected
+    if (paymentMode === 'split') {
+      const cash = parseFloat(splitAmts?.cash) || 0
+      const upi  = parseFloat(splitAmts?.upi)  || 0
+      const bill = tableBills.find(b => b.id === billId)
+      if (cash + upi !== Math.round(bill?.total || 0)) {
+        alert(`Cash (₹${cash}) + UPI (₹${upi}) must equal total ₹${Math.round(bill?.total || 0)}`)
+        return
+      }
+    }
     setSettling(billId)
     try {
-      await updateDoc(doc(db, 'clubs', uid, 'bills', billId), {
+      const updates = {
         settled:     true,
-        paymentMode: paymentMode || 'cash',   // save the chosen payment mode
+        paymentMode: paymentMode || 'cash',
         settledAt:   new Date().toISOString(),
-      })
+      }
+      if (paymentMode === 'split' && splitAmts) {
+        updates.cashAmount = parseFloat(splitAmts.cash) || 0
+        updates.upiAmount  = parseFloat(splitAmts.upi)  || 0
+      }
+      await updateDoc(doc(db, 'clubs', uid, 'bills', billId), updates)
     } catch(e) {
       alert('Failed to settle. Try again.')
     }
@@ -829,7 +846,7 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
     const totalAmt = Math.round(tableBills.reduce((s,b)=>s+b.total,0))
     if (!window.confirm(`Settle all ${tableBills.length} bill(s) totalling ₹${totalAmt}?\nPayment mode for each will be what was selected, or Cash by default.`)) return
     for (const b of tableBills) {
-      await settleBill(b.id, settlePayMode[b.id] || 'cash')
+      await settleBill(b.id, settlePayMode[b.id] || 'cash', settleSplit[b.id])
     }
   }
 
@@ -846,9 +863,9 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
     const current = ds(billId)
     const newClicks = (current.clicks || 0) + 1
     setDs(billId, { clicks: newClicks })
-    // Reset counter after 800000000ms of inactivity
+    // Reset counter after 800ms of inactivity
     clearTimeout(clickTimers[billId])
-    clickTimers[billId] = setTimeout(() => setDs(billId, { clicks: 0 }), 800000000)
+    clickTimers[billId] = setTimeout(() => setDs(billId, { clicks: 0 }), 800)
     if (newClicks >= 3) {
       setDs(billId, { clicks: 0, pinShown: true })
     }
@@ -989,6 +1006,40 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
                             </button>
                           ))}
                         </div>
+                        {/* Split amount inputs — shown only when UPI+Cash selected */}
+                        {(settlePayMode[b.id]||'cash') === 'split' && (() => {
+                          const spl   = settleSplit[b.id] || { cash:'', upi:'' }
+                          const cash  = parseFloat(spl.cash) || 0
+                          const upi   = parseFloat(spl.upi)  || 0
+                          const total = Math.round(b.total)
+                          const ok    = Math.round(cash + upi) === total
+                          return (
+                            <div style={{ display:'flex', flexDirection:'column', gap:4, width:'100%' }}>
+                              <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+                                <span style={{ fontSize:'0.68rem', color:'var(--color-text3)', minWidth:32 }}>Cash</span>
+                                <input type="number" min="0" max={total} placeholder="0"
+                                  value={spl.cash}
+                                  onChange={e => {
+                                    const c = e.target.value
+                                    const remaining = Math.max(0, total - (parseFloat(c)||0))
+                                    setSettleSplit(p => ({...p, [b.id]: { cash: c, upi: String(remaining) }}))
+                                  }}
+                                  style={{ width:60, padding:'2px 5px', borderRadius:4, border:'1px solid var(--color-border)', background:'var(--color-bg2)', color:'var(--color-text)', fontSize:'0.78rem' }} />
+                              </div>
+                              <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+                                <span style={{ fontSize:'0.68rem', color:'var(--color-text3)', minWidth:32 }}>UPI</span>
+                                <input type="number" min="0" max={total} placeholder="0"
+                                  value={spl.upi}
+                                  onChange={e => setSettleSplit(p => ({...p, [b.id]: { ...spl, upi: e.target.value }}))}
+                                  style={{ width:60, padding:'2px 5px', borderRadius:4, border:'1px solid var(--color-border)', background:'var(--color-bg2)', color:'var(--color-text)', fontSize:'0.78rem' }} />
+                              </div>
+                              <div style={{ fontSize:'0.68rem', color: ok ? 'var(--color-green)' : 'var(--color-red)' }}>
+                                {ok ? `✓ ₹${cash} + ₹${upi} = ₹${total}` : `Sum ₹${Math.round(cash+upi)} ≠ ₹${total}`}
+                              </div>
+                            </div>
+                          )
+                        })()}
+
                         {/* Confirm / Cancel */}
                         <div style={{ display:'flex', gap:4 }}>
                           <button onClick={() => cancelSettle(b.id)}
@@ -996,7 +1047,7 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
                             Cancel
                           </button>
                           <button
-                            onClick={() => settleBill(b.id, settlePayMode[b.id] || 'cash')}
+                            onClick={() => settleBill(b.id, settlePayMode[b.id] || 'cash', settleSplit[b.id])}
                             disabled={settling === b.id}
                             style={{ padding:'3px 10px', borderRadius:5, fontSize:'0.72rem', border:'1px solid var(--color-green)', background:'var(--color-green-glow)', color:'var(--color-green)', cursor:'pointer', fontWeight:700, opacity: settling===b.id ? 0.6 : 1 }}>
                             {settling === b.id ? '...' : '✓ Confirm'}
@@ -1056,7 +1107,7 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
                     </div>
                   )}
                 </div>
-               </div>
+                </div>
               )
             })}
           </div>
