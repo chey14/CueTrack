@@ -940,7 +940,11 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
               const checkIn  = b.checkInTime  ? new Date(b.checkInTime)  : null
               const checkOut = b.checkOutTime ? new Date(b.checkOutTime) : b.createdAt
               const isPending = b.paymentMode === 'paid_pending' && (b.pendingAmount||0) > 0
-              const tag = payTag[b.paymentMode] || { label: b.paymentMode, cls:'tag tag-green' }
+              // Show selected settle mode in tag when picker is open, else show original
+              const displayMode = confirmingId === b.id && settlePayMode[b.id]
+                ? settlePayMode[b.id]
+                : b.paymentMode
+              const tag = payTag[displayMode] || { label: displayMode, cls:'tag tag-green' }
 
               return (
                 <div key={b.id} style={{
@@ -1106,7 +1110,7 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
                       )}
                     </div>
                   )}
-                </div>
+                  </div>
                 </div>
               )
             })}
