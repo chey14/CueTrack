@@ -46,12 +46,14 @@ export function useTables(settingsTables) {
 
   const tables = (settingsTables || []).map(t => ({
     ...t,
-    status:      tableStates[t.id]?.status      ?? 'available',
-    elapsed:     tableStates[t.id]?.elapsed      ?? 0,
-    startTime:   tableStates[t.id]?.startTime    ?? null,
-    lateMinutes: tableStates[t.id]?.lateMinutes  ?? 0,
-    canteen:     tableStates[t.id]?.canteen      ?? [],
-    customer:    tableStates[t.id]?.customer     ?? null,
+    status:        tableStates[t.id]?.status        ?? 'available',
+    elapsed:       tableStates[t.id]?.elapsed        ?? 0,
+    startTime:     tableStates[t.id]?.startTime      ?? null,
+    lateMinutes:   tableStates[t.id]?.lateMinutes    ?? 0,
+    canteen:       tableStates[t.id]?.canteen        ?? [],
+    customer:      tableStates[t.id]?.customer       ?? null,
+    carriedAmount: tableStates[t.id]?.carriedAmount  ?? 0,
+    carriedNote:   tableStates[t.id]?.carriedNote    ?? '',
   }))
 
   async function updateTable(tableId, updates) {
@@ -125,9 +127,11 @@ export function useTables(settingsTables) {
       elapsed:      billedSeconds,
       lateMinutes:  table.lateMinutes || 0,
       ratePerMin:   table.ratePerMin,
-      tableCharge:  billData.tableCharge,
-      canteen:      table.canteen,
-      canteenTotal: billData.canteenTotal,
+      tableCharge:    billData.tableCharge,   // already includes carriedAmount
+      carriedAmount:  table.carriedAmount || 0,
+      carriedNote:    table.carriedNote   || '',
+      canteen:        table.canteen,
+      canteenTotal:   billData.canteenTotal,
       discount:     billData.discount || 0,
       total:        billData.total,
       paymentMode:  billData.paymentMode,
@@ -144,6 +148,7 @@ export function useTables(settingsTables) {
     await updateTable(String(table.id), {
       status: 'available', elapsed: 0, startTime: null,
       lateMinutes: 0, canteen: [], customer: null,
+      carriedAmount: 0, carriedNote: '',
     })
 
     return billNumber
@@ -181,26 +186,35 @@ export function useTables(settingsTables) {
   }
 
   // ── Transfer session to another table ───────────────────────
-  // Copies elapsed time, customer, canteen, lateMinutes to toTableId.
-  // Old table resets to available. Timer continues from where it left off.
+  // Carries the BILLED AMOUNT from the old table as a fixed credit.
+  // New table starts fresh timer at its own rate.
+  // Total bill = carriedAmount (old table) + new elapsed × new table rate.
   async function transferTable(fromTable, toTableId) {
     if (!uid()) return
-    const liveElapsed = fromTable.elapsed  // already includes live delta from liveTables
 
-    // Start the destination table from the current elapsed
+    // Calculate how much has been billed on the source table so far
+    const lateSeconds    = (fromTable.lateMinutes || 0) * 60
+    const billedSeconds  = fromTable.elapsed + lateSeconds
+    const carriedAmount  = Math.round(billedSeconds * fromTable.ratePerMin / 60)
+
+    // Start destination table fresh — timer resets to 0
+    // carriedAmount is stored separately so it's added to the new table's bill
     await updateTable(String(toTableId), {
-      status:      fromTable.status === 'paused' ? 'paused' : 'running',
-      startTime:   fromTable.status === 'paused' ? null : Date.now(),
-      elapsed:     liveElapsed,
-      lateMinutes: fromTable.lateMinutes || 0,
-      canteen:     fromTable.canteen     || [],
-      customer:    fromTable.customer    || null,
+      status:          'running',
+      startTime:       Date.now(),
+      elapsed:         0,           // fresh timer — rate will be new table's rate
+      lateMinutes:     0,
+      canteen:         fromTable.canteen  || [],
+      customer:        fromTable.customer || null,
+      carriedAmount:   carriedAmount,     // ₹ from previous table(s)
+      carriedNote:     `₹${carriedAmount} from ${fromTable.name}`,
     })
 
-    // Reset the source table to available
+    // Reset source table
     await updateTable(String(fromTable.id), {
       status: 'available', elapsed: 0, startTime: null,
       lateMinutes: 0, canteen: [], customer: null,
+      carriedAmount: 0, carriedNote: '',
     })
   }
 

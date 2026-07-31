@@ -562,13 +562,14 @@ function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, ownerPin, on
 
   // lateMinutes: extra time charged but NOT shown as "late check-in" on the bill.
   // The bill just shows a slightly longer billed duration with no mention of late arrival.
-  const lateSeconds   = (table.lateMinutes || 0) * 60
-  const billedSeconds = table.elapsed + lateSeconds
-  const tableCharge   = billedSeconds * table.ratePerMin / 60
-  const canteenTotal  = table.canteen.reduce((s, i) => s + i.price, 0)
-  const subtotal      = Math.round(tableCharge + canteenTotal)
-  const total         = Math.max(0, subtotal - Math.round(discountAmt))
-  const ratePerHour   = Math.round(table.ratePerMin * 60)
+  const lateSeconds    = (table.lateMinutes || 0) * 60
+  const billedSeconds  = table.elapsed + lateSeconds
+  const newTableCharge = billedSeconds * table.ratePerMin / 60
+  const tableCharge    = newTableCharge + (table.carriedAmount || 0)  // add carried from previous table
+  const canteenTotal   = table.canteen.reduce((s, i) => s + i.price, 0)
+  const subtotal       = Math.round(tableCharge + canteenTotal)
+  const total          = Math.max(0, subtotal - Math.round(discountAmt))
+  const ratePerHour    = Math.round(table.ratePerMin * 60)
 
   const now          = new Date()
   const checkOutTime = now
@@ -601,7 +602,8 @@ function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, ownerPin, on
       `   Check-out: *${fmtTime12(checkOutTime)}*`,
       `   Time: *${timeStr}*`,
       `   Rate: ₹${ratePerHour}/hr`,
-      `   Table: *${fmtRound(tableCharge)}*`,
+      ...(table.carriedAmount > 0 ? [`   ${table.carriedNote}: *${fmtRound(table.carriedAmount)}*`] : []),
+      `   ${table.carriedAmount > 0 ? '+ ' : ''}Table (${table.name}): *${fmtRound(newTableCharge)}*`,
     ]
     if (table.canteen.length > 0) {
       lines.push('', '🍟 *Canteen:*')
@@ -707,7 +709,10 @@ function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, ownerPin, on
             </div>
           </div>
 
-          <BillRow label={`Table (${formatTime(billedSeconds)} @ ₹${table.ratePerMin.toFixed(2)}/min)`} value={fmtRound(tableCharge)} />
+          {(table.carriedAmount||0) > 0 && (
+            <BillRow label={table.carriedNote || 'Previous table'} value={fmtRound(table.carriedAmount)} muted />
+          )}
+          <BillRow label={`${(table.carriedAmount||0)>0?'+ ':''}Table (${formatTime(billedSeconds)} @ ₹${table.ratePerMin.toFixed(2)}/min)`} value={fmtRound(newTableCharge)} />
           {table.canteen.map((item, i) => <BillRow key={i} label={item.name} value={fmtRound(item.price)} muted />)}
           {discountAmt > 0 && <BillRow label="Discount" value={`-${fmtRound(discountAmt)}`} muted />}
           <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '0.5rem', marginTop: '0.35rem', borderTop: '1px solid var(--color-border)' }}>
@@ -1200,10 +1205,12 @@ function TransferModal({ fromTable, availableTables, onConfirm, onClose }) {
 
 // ── Table card ────────────────────────────────────────────────────
 function TableCard({ table, onStart, onEditCustomer, onPause, onResume, onEnd, onAddCanteen, onRemoveCanteen, onDelete, todayBillCount, onShowBills, onTransfer }) {
-  const lateSeconds  = (table.lateMinutes || 0) * 60
-  const billedCost   = (table.elapsed + lateSeconds) * table.ratePerMin / 60
-  const cost         = table.elapsed * table.ratePerMin / 60   // for display timer only
-  const canteenTotal = table.canteen.reduce((s, i) => s + i.price, 0)
+  const lateSeconds   = (table.lateMinutes || 0) * 60
+  const billedCost    = (table.elapsed + lateSeconds) * table.ratePerMin / 60
+  const carried       = table.carriedAmount || 0
+  const totalCost     = billedCost + carried   // carried from previous table(s) + current
+  const cost          = table.elapsed * table.ratePerMin / 60
+  const canteenTotal  = table.canteen.reduce((s, i) => s + i.price, 0)
 
   const statusColor = { available: 'var(--color-green)', running: 'var(--color-amber)', paused: 'var(--color-blue)' }
   const statusClass = { available: 'table-available', running: 'table-running running-border', paused: 'table-paused' }
@@ -1275,8 +1282,14 @@ function TableCard({ table, onStart, onEditCustomer, onPause, onResume, onEnd, o
       <div style={{ fontSize: '0.95rem', fontFamily: 'var(--font-display)', fontWeight: 600, color: table.status === 'available' ? 'var(--color-text3)' : 'var(--color-amber)', marginBottom: '0.25rem' }}>
         {table.status === 'available'
           ? `₹${Math.round(table.ratePerMin * 60)}/hr`
-          : `${fmtRound(billedCost + canteenTotal)}${canteenTotal > 0 ? ` (incl. ₹${Math.round(canteenTotal)} canteen)` : ''}`}
+          : `${fmtRound(totalCost + canteenTotal)}${canteenTotal > 0 ? ` (incl. ₹${Math.round(canteenTotal)} canteen)` : ''}`}
       </div>
+      {/* Show carried amount indicator when session transferred from another table */}
+      {table.status !== 'available' && carried > 0 && (
+        <div style={{ fontSize:'0.72rem', color:'var(--color-text3)', marginBottom:'0.15rem' }}>
+          {table.carriedNote} + ₹{Math.round(billedCost)} here
+        </div>
+      )}
 
       {/* Canteen items with delete */}
       {table.canteen.length > 0 && (
@@ -1425,7 +1438,7 @@ export default function Tables() {
     { label: 'Available',   value: liveTables.filter(t => t.status === 'available').length,  color: 'var(--color-green)' },
     { label: 'Running',     value: liveTables.filter(t => t.status === 'running').length,    color: 'var(--color-amber)' },
     { label: 'Paused',      value: liveTables.filter(t => t.status === 'paused').length,     color: 'var(--color-blue)'  },
-    { label: 'Earning now', value: '₹' + Math.round(liveTables.reduce((s, t) => s + ((t.elapsed + (t.lateMinutes||0)*60) * t.ratePerMin / 60) + t.canteen.reduce((c, i) => c + i.price, 0), 0)), color: 'var(--color-text)' },
+    { label: 'Earning now', value: '₹' + Math.round(liveTables.reduce((s, t) => s + ((t.elapsed + (t.lateMinutes||0)*60) * t.ratePerMin / 60) + (t.carriedAmount||0) + t.canteen.reduce((c, i) => c + i.price, 0), 0)), color: 'var(--color-text)' },
   ]
 
   if (loading) {
