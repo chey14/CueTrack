@@ -180,10 +180,34 @@ export function useTables(settingsTables) {
     return billNumber
   }
 
+  // ── Transfer session to another table ───────────────────────
+  // Copies elapsed time, customer, canteen, lateMinutes to toTableId.
+  // Old table resets to available. Timer continues from where it left off.
+  async function transferTable(fromTable, toTableId) {
+    if (!uid()) return
+    const liveElapsed = fromTable.elapsed  // already includes live delta from liveTables
+
+    // Start the destination table from the current elapsed
+    await updateTable(String(toTableId), {
+      status:      fromTable.status === 'paused' ? 'paused' : 'running',
+      startTime:   fromTable.status === 'paused' ? null : Date.now(),
+      elapsed:     liveElapsed,
+      lateMinutes: fromTable.lateMinutes || 0,
+      canteen:     fromTable.canteen     || [],
+      customer:    fromTable.customer    || null,
+    })
+
+    // Reset the source table to available
+    await updateTable(String(fromTable.id), {
+      status: 'available', elapsed: 0, startTime: null,
+      lateMinutes: 0, canteen: [], customer: null,
+    })
+  }
+
   return {
     tables, loading,
     startTable, pauseTable, resumeTable,
     addCanteenItems, removeCanteenItem, updateCustomer,
-    checkoutTable, saveCanteenBill, resetTable,
+    checkoutTable, saveCanteenBill, resetTable, transferTable,
   }
 }

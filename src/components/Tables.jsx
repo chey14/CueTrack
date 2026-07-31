@@ -869,7 +869,6 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
     if (newClicks >= 3) {
       setDs(billId, { clicks: 0, pinShown: true })
     }
-
   }
 
   function verifyDiscountPin(billId, pinVal) {
@@ -1139,8 +1138,68 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
   )
 }
 
+
+// ── Transfer Session Modal ────────────────────────────────────────
+// Moves a running/paused session from one table to another.
+// Only available tables are shown as transfer targets.
+function TransferModal({ fromTable, availableTables, onConfirm, onClose }) {
+  const [targetId, setTargetId] = useState(null)
+
+  return (
+    <Modal onClose={onClose}>
+      <div className="card" style={{ width:'100%', maxWidth:380, padding:'1.5rem' }}>
+        <h3 style={{ fontFamily:'var(--font-display)', fontWeight:700, marginBottom:'0.35rem' }}>
+          Transfer session
+        </h3>
+        <p style={{ fontSize:'0.82rem', color:'var(--color-text3)', marginBottom:'1.25rem' }}>
+          Moving <strong>{fromTable.name}</strong> ({formatTimerDisplay(fromTable.elapsed)} elapsed)
+          to a new table. Timer continues from where it left off.
+        </p>
+
+        {availableTables.length === 0 ? (
+          <p style={{ fontSize:'0.88rem', color:'var(--color-amber)', marginBottom:'1.25rem' }}>
+            No available tables to transfer to.
+          </p>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:'0.5rem', marginBottom:'1.25rem' }}>
+            {availableTables.map(t => (
+              <button key={t.id} onClick={() => setTargetId(t.id)}
+                style={{
+                  padding:'0.7rem 1rem', borderRadius:8, textAlign:'left', cursor:'pointer',
+                  fontFamily:'var(--font-display)', fontWeight:600, fontSize:'0.88rem',
+                  border: targetId === t.id ? '1px solid var(--color-green)' : '1px solid var(--color-border)',
+                  background: targetId === t.id ? 'var(--color-green-glow)' : 'var(--color-bg3)',
+                  color: targetId === t.id ? 'var(--color-green)' : 'var(--color-text)',
+                  transition:'all 0.15s',
+                }}>
+                <div>{t.name}</div>
+                <div style={{ fontSize:'0.72rem', fontWeight:400, color: targetId===t.id ? 'var(--color-green)' : 'var(--color-text3)', marginTop:2 }}>
+                  {t.type} · {t.size} · ₹{Math.round(t.ratePerMin*60)}/hr
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div style={{ display:'flex', gap:'0.6rem' }}>
+          <button onClick={onClose} className="btn-ghost" style={{ flex:1, justifyContent:'center' }}>
+            Cancel
+          </button>
+          <button
+            onClick={() => targetId && onConfirm(targetId)}
+            disabled={!targetId}
+            className="btn-primary"
+            style={{ flex:1, justifyContent:'center', opacity: targetId ? 1 : 0.45 }}>
+            ↗ Transfer
+          </button>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
 // ── Table card ────────────────────────────────────────────────────
-function TableCard({ table, onStart, onEditCustomer, onPause, onResume, onEnd, onAddCanteen, onRemoveCanteen, onDelete, todayBillCount, onShowBills }) {
+function TableCard({ table, onStart, onEditCustomer, onPause, onResume, onEnd, onAddCanteen, onRemoveCanteen, onDelete, todayBillCount, onShowBills, onTransfer }) {
   const lateSeconds  = (table.lateMinutes || 0) * 60
   const billedCost   = (table.elapsed + lateSeconds) * table.ratePerMin / 60
   const cost         = table.elapsed * table.ratePerMin / 60   // for display timer only
@@ -1247,6 +1306,7 @@ function TableCard({ table, onStart, onEditCustomer, onPause, onResume, onEnd, o
             <button onClick={() => onPause(table.id)} className="btn-ghost" style={{ flex: 1, justifyContent: 'center', padding: '0.5rem', fontSize: '0.85rem' }}>⏸ Pause</button>
             <button onClick={() => onAddCanteen(table.id)} className="btn-ghost" style={{ flex: 'none', padding: '0.5rem 0.7rem', fontSize: '0.85rem' }}>🍟</button>
             <button onClick={() => onEnd(table.id)} style={{ flex: 1, padding: '0.5rem', borderRadius: 8, border: '1px solid rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.08)', color: 'var(--color-red)', fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}>■ End</button>
+            <button onClick={() => onTransfer(table.id)} title="Transfer session to another table" style={{ flex: 'none', padding: '0.5rem 0.6rem', borderRadius: 8, border: '1px solid rgba(99,102,241,0.4)', background: 'rgba(99,102,241,0.08)', color: 'rgba(99,102,241,0.85)', cursor: 'pointer', fontSize: '0.8rem' }}>↗</button>
             <button onClick={() => onDelete(table.id, table.elapsed + (table.lateMinutes||0)*60)} title="Delete session (only if < 3 min)" style={{ flex: 'none', padding: '0.5rem 0.6rem', borderRadius: 8, border: '1px solid rgba(239,68,68,0.25)', background: 'transparent', color: 'rgba(239,68,68,0.5)', cursor: 'pointer', fontSize: '0.8rem' }}>🗑</button>
           </>
         )}
@@ -1255,6 +1315,7 @@ function TableCard({ table, onStart, onEditCustomer, onPause, onResume, onEnd, o
             <button onClick={() => onResume(table.id)} className="btn-primary" style={{ flex: 1, justifyContent: 'center', padding: '0.5rem', fontSize: '0.85rem' }}>▶ Resume</button>
             <button onClick={() => onAddCanteen(table.id)} className="btn-ghost" style={{ flex: 'none', padding: '0.5rem 0.7rem', fontSize: '0.85rem' }}>🍟</button>
             <button onClick={() => onEnd(table.id)} style={{ flex: 'none', padding: '0.5rem 0.85rem', borderRadius: 8, border: '1px solid rgba(239,68,68,0.4)', background: 'rgba(239,68,68,0.08)', color: 'var(--color-red)', fontFamily: 'var(--font-display)', fontWeight: 600, fontSize: '0.85rem', cursor: 'pointer' }}>■ End</button>
+            <button onClick={() => onTransfer(table.id)} title="Transfer session to another table" style={{ flex: 'none', padding: '0.5rem 0.6rem', borderRadius: 8, border: '1px solid rgba(99,102,241,0.4)', background: 'rgba(99,102,241,0.08)', color: 'rgba(99,102,241,0.85)', cursor: 'pointer', fontSize: '0.8rem' }}>↗</button>
             <button onClick={() => onDelete(table.id, table.elapsed + (table.lateMinutes||0)*60)} title="Delete session (only if < 3 min)" style={{ flex: 'none', padding: '0.5rem 0.6rem', borderRadius: 8, border: '1px solid rgba(239,68,68,0.25)', background: 'transparent', color: 'rgba(239,68,68,0.5)', cursor: 'pointer', fontSize: '0.8rem' }}>🗑</button>
           </>
         )}
@@ -1271,13 +1332,14 @@ export default function Tables() {
     tables, loading,
     startTable, pauseTable, resumeTable,
     addCanteenItems, removeCanteenItem, updateCustomer,
-    checkoutTable, saveCanteenBill, resetTable,
+    checkoutTable, saveCanteenBill, resetTable, transferTable,
   } = useTables(settings.tables)
 
   const [editCustomerId,    setEditCustomerId]    = useState(null)
   const [checkoutTarget,    setCheckoutTarget]    = useState(null)
   const [canteenTarget,     setCanteenTarget]     = useState(null)
   const [billsTarget,       setBillsTarget]       = useState(null)
+  const [transferTarget,    setTransferTarget]    = useState(null)
   const [standaloneCanteen, setStandaloneCanteen] = useState(false)
   const [standaloneItems,   setStandaloneItems]   = useState([])
   const [canteenCheckout,   setCanteenCheckout]   = useState(false)
@@ -1404,6 +1466,7 @@ export default function Tables() {
             onDelete={handleDelete}
             todayBillCount={todayBillsByTable[table.id] || 0}
             onShowBills={() => setBillsTarget(table)}
+            onTransfer={(id) => setTransferTarget(liveTables.find(t => t.id === id))}
           />
         ))}
       </div>
@@ -1478,6 +1541,18 @@ export default function Tables() {
           bills={bills}
           ownerPin={settings.ownerPin}
           onClose={() => setBillsTarget(null)}
+        />
+      )}
+
+      {transferTarget && (
+        <TransferModal
+          fromTable={transferTarget}
+          availableTables={liveTables.filter(t => t.status === 'available')}
+          onClose={() => setTransferTarget(null)}
+          onConfirm={async (toTableId) => {
+            await transferTable(transferTarget, toTableId)
+            setTransferTarget(null)
+          }}
         />
       )}
     </div>
