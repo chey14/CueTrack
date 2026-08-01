@@ -11,11 +11,19 @@ function tablesCol() { return collection(db, 'clubs', uid(), 'tables') }
 function billsCol()  { return collection(db, 'clubs', uid(), 'bills')  }
 function counterRef(){ return doc(db, 'clubs', uid(), 'settings', 'billCounter') }
 
-// Sequential bill number: CT-YYYYMMDD-001, 002, ...
-// runTransaction ensures two simultaneous checkouts never get the same number.
+// ── Custom bill number prefixes per account ──────────────────────
+// Format for custom accounts: PREFIX/YYMMDD/0001
+// Format for all others:      CT-YYYYMMDD-001
+const BILL_PREFIX_MAP = {
+  'cncpool23@gmail.com':    'CNCP',
+  'cncsnooker23@gmail.com': 'CNCS',
+}
+
 async function getNextBillNumber() {
-  const d    = new Date()
-  const date = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`
+  const d     = new Date()
+  const email = auth.currentUser?.email || ''
+  const prefix = BILL_PREFIX_MAP[email.toLowerCase()]
+
   let seq = 1
   try {
     await runTransaction(db, async (tx) => {
@@ -26,6 +34,17 @@ async function getNextBillNumber() {
   } catch (e) {
     seq = Math.floor(Date.now() / 1000) % 10000
   }
+
+  if (prefix) {
+    // Custom format: CNCP/260801/0001 (YYMMDD, 4-digit seq)
+    const yy   = String(d.getFullYear()).slice(2)
+    const mm   = String(d.getMonth() + 1).padStart(2, '0')
+    const dd   = String(d.getDate()).padStart(2, '0')
+    return `${prefix}/${yy}${mm}${dd}/${String(seq).padStart(4, '0')}`
+  }
+
+  // Default format: CT-YYYYMMDD-001
+  const date = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`
   return `CT-${date}-${String(seq).padStart(3, '0')}`
 }
 
