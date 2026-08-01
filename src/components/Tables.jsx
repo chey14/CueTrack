@@ -531,12 +531,10 @@ function CanteenCheckoutModal({ items, upiId, upiQrBase64, upiQrUrl, clubName, o
           splitOk={splitOk} pendingAmt={pendingAmt}
         />
 
-        {/* Hidden discount — revealed by triple-clicking the title */}
-        {showHiddenDiscount && (
-          <div style={{ marginBottom: '1rem', padding: '0.6rem 0.85rem', background: 'var(--color-bg3)', borderRadius: 8, border: '1px solid var(--color-border)' }}>
-            <DiscountSection subtotal={subtotal} discountAmt={discountAmt} setDiscountAmt={setDiscountAmt} ownerPin={ownerPin} />
-          </div>
-        )}
+        {/* Discount — same hidden triple-click mechanism */}
+        <div style={{ marginBottom: '1rem' }}>
+          <DiscountSection subtotal={subtotal} discountAmt={discountAmt} setDiscountAmt={setDiscountAmt} ownerPin={ownerPin} />
+        </div>
 
         <div style={{ display: 'flex', gap: '0.6rem' }}>
           <button onClick={onClose} className="btn-ghost" style={{ flex: 1, justifyContent: 'center' }}>Cancel</button>
