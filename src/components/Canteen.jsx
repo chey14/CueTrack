@@ -1,5 +1,14 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { doc, onSnapshot, setDoc } from 'firebase/firestore'
+import { db, auth } from '../firebase'
 import { useClubSettings } from '../hooks/useClubSettings'
+
+// ── Firestore helpers ─────────────────────────────────────────────
+function menuRef() {
+  const uid = auth.currentUser?.uid
+  if (!uid) return null
+  return doc(db, 'clubs', uid, 'settings', 'canteenMenu')
+}
 
 const INITIAL_MENU = [
   { id: 1, name: 'Coke',       price: 40, qty: 10, category: 'Drinks' },
@@ -14,11 +23,17 @@ const INITIAL_MENU = [
 const CATEGORIES = ['Drinks', 'Snacks', 'Meals', 'Other']
 const lbl = { fontSize: '0.82rem', color: 'var(--color-text2)', marginBottom: 5, display: 'block' }
 
+// Save menu to Firestore
+async function saveMenu(items) {
+  const ref = menuRef()
+  if (!ref) return
+  await setDoc(ref, { items }, { merge: false })
+}
+
 function PinGate({ action, onUnlock, onCancel, ownerPin }) {
   const [pin, setPin] = useState('')
   const [err, setErr] = useState(false)
   function verify() {
-    // Use Firestore PIN (synced across devices), fallback to localStorage, then default
     const correctPin = ownerPin || localStorage.getItem('ct_owner_pin') || '1234'
     if (pin === correctPin) onUnlock()
     else { setErr(true); setPin('') }
@@ -42,23 +57,48 @@ function PinGate({ action, onUnlock, onCancel, ownerPin }) {
 
 export default function Canteen() {
   const { settings } = useClubSettings()
-  const [menu, setMenu] = useState(INITIAL_MENU)
-  const [form,    setForm]    = useState({ name:'', price:'', qty:'', category:'Drinks' })
-  const [showAdd, setShowAdd] = useState(false)
-  const [editId,  setEditId]  = useState(null)
-  // inventoryState: 'idle' | 'pending-bulk' | 'unlocked-bulk' | 'pending-item:{id}' | 'unlocked-item:{id}'
+  const [menu,           setMenu]           = useState(INITIAL_MENU)
+  const [loading,        setLoading]        = useState(true)
+  const [form,           setForm]           = useState({ name:'', price:'', qty:'', category:'Drinks' })
+  const [showAdd,        setShowAdd]        = useState(false)
+  const [editId,         setEditId]         = useState(null)
   const [inventoryState, setInventoryState] = useState('idle')
 
-  function handleSaveItem(e) {
+  // ── Load menu from Firestore on mount ──────────────────────────
+  useEffect(() => {
+    const ref = menuRef()
+    if (!ref) { setLoading(false); return }
+    const unsub = onSnapshot(ref, snap => {
+      if (snap.exists() && snap.data().items?.length > 0) {
+        setMenu(snap.data().items)
+      }
+      // If no Firestore data yet, keep INITIAL_MENU (first time setup)
+      setLoading(false)
+    })
+    return unsub
+  }, [])
+
+  // ── Helper: update menu state + save to Firestore ──────────────
+  async function updateMenu(newMenu) {
+    setMenu(newMenu)
+    await saveMenu(newMenu)
+  }
+
+  async function handleSaveItem(e) {
     e.preventDefault()
+    let newMenu
     if (editId) {
-      setMenu(prev => prev.map(i => i.id===editId
+      newMenu = menu.map(i => i.id===editId
         ? { ...i, name:form.name, price:parseFloat(form.price), qty:parseInt(form.qty)||0, category:form.category }
-        : i))
+        : i)
       setEditId(null)
     } else {
-      setMenu(prev => [...prev, { id:Date.now(), name:form.name, price:parseFloat(form.price), qty:parseInt(form.qty)||0, category:form.category }])
+      newMenu = [...menu, {
+        id: Date.now(), name:form.name,
+        price:parseFloat(form.price), qty:parseInt(form.qty)||0, category:form.category,
+      }]
     }
+    await updateMenu(newMenu)
     setForm({ name:'', price:'', qty:'', category:'Drinks' })
     setShowAdd(false)
   }
@@ -68,12 +108,19 @@ export default function Canteen() {
     setEditId(item.id); setShowAdd(true)
   }
 
-  function handleDelete(id) {
-    if (window.confirm('Remove this item from the menu?')) setMenu(prev => prev.filter(i=>i.id!==id))
+  async function handleDelete(id) {
+    if (window.confirm('Remove this item from the menu?')) {
+      await updateMenu(menu.filter(i => i.id !== id))
+    }
   }
 
-  function setItemQty(id, qty) { setMenu(prev => prev.map(i => i.id===id ? {...i, qty:Math.max(0,qty)} : i)) }
-  function adjustQty(id, delta){ setMenu(prev => prev.map(i => i.id===id ? {...i, qty:Math.max(0,i.qty+delta)} : i)) }
+  async function setItemQty(id, qty) {
+    await updateMenu(menu.map(i => i.id===id ? {...i, qty:Math.max(0,qty)} : i))
+  }
+
+  async function adjustQty(id, delta) {
+    await updateMenu(menu.map(i => i.id===id ? {...i, qty:Math.max(0,i.qty+delta)} : i))
+  }
 
   const grouped = CATEGORIES.reduce((acc,cat) => {
     const items = menu.filter(i=>i.category===cat)
@@ -88,6 +135,10 @@ export default function Canteen() {
 
   const unlockedItemId = inventoryState.startsWith('unlocked-item:')
     ? parseInt(inventoryState.replace('unlocked-item:','')) : null
+
+  if (loading) return (
+    <div style={{ color:'var(--color-text3)', padding:'2rem', textAlign:'center' }}>Loading canteen menu...</div>
+  )
 
   return (
     <div>
@@ -149,7 +200,7 @@ export default function Canteen() {
             </button>
           </div>
           <p style={{ fontSize:'0.78rem', color:'var(--color-text3)', marginBottom:'1rem' }}>
-            Set the current stock count for each item. Changes save immediately.
+            Set the current stock count for each item. Changes save to Firestore immediately.
           </p>
           <div style={{ display:'flex', flexDirection:'column', gap:'0.5rem' }}>
             {menu.map(item => (
