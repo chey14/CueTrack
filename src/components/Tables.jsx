@@ -1272,7 +1272,7 @@ function TableCard({ table, onStart, onEditCustomer, onPause, onResume, onEnd, o
       {/* Show late indicator so owner knows why timer is higher */}
       {table.status !== 'available' && table.lateMinutes > 0 && (
         <div style={{ fontSize: '0.72rem', color: 'var(--color-amber)', marginBottom: '0.2rem', fontWeight: 500 }}>
-          ⏱ includes +{table.lateMinutes}m late check-in
+          ⏱ 
         </div>
       )}
 
