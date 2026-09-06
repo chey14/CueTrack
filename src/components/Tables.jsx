@@ -800,7 +800,7 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
   const totalAmount  = tableBills.reduce((s,b) => s + b.total, 0)
   const totalPending = tableBills.reduce((s,b) => s + (b.pendingAmount||0), 0)
 
-  async function settleBill(billId, paymentMode, splitAmts) {
+  async function settleBill(billId, paymentMode, splitAmts, billTotal) {
     const uid = auth.currentUser?.uid
     if (!uid) return
     // Validate split amounts if UPI+Cash selected
@@ -810,6 +810,18 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
       const bill = tableBills.find(b => b.id === billId)
       if (cash + upi !== Math.round(bill?.total || 0)) {
         alert(`Cash (₹${cash}) + UPI (₹${upi}) must equal total ₹${Math.round(bill?.total || 0)}`)
+        return
+      }
+    }
+    if (paymentMode === 'paid_pending') {
+      const paid = parseFloat(splitAmts?.cash) || 0
+      const bill = tableBills.find(b => b.id === billId)
+      if (paid <= 0) {
+        alert('Enter the amount paid now.')
+        return
+      }
+      if (paid > Math.round(bill?.total || 0)) {
+        alert(`Amount paid (₹${paid}) cannot exceed total ₹${Math.round(bill?.total || 0)}`)
         return
       }
     }
@@ -823,6 +835,15 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
       if (paymentMode === 'split' && splitAmts) {
         updates.cashAmount = parseFloat(splitAmts.cash) || 0
         updates.upiAmount  = parseFloat(splitAmts.upi)  || 0
+      }
+      if (paymentMode === 'paid_pending' && splitAmts) {
+        const paidNow  = parseFloat(splitAmts.cash) || 0
+        // Use directly passed billTotal — more reliable than looking up from tableBills array
+        const total    = billTotal || tableBills.find(b => b.id === billId)?.total || 0
+        const pending  = Math.max(0, Math.round(total) - paidNow)
+        updates.cashAmount    = paidNow
+        updates.pendingAmount = pending
+        updates.settled       = pending === 0  // only fully settled when nothing pending
       }
       await updateDoc(doc(db, 'clubs', uid, 'bills', billId), updates)
     } catch(e) {
@@ -849,7 +870,7 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
     const totalAmt = Math.round(tableBills.reduce((s,b)=>s+b.total,0))
     if (!window.confirm(`Settle all ${tableBills.length} bill(s) totalling ₹${totalAmt}?\nPayment mode for each will be what was selected, or Cash by default.`)) return
     for (const b of tableBills) {
-      await settleBill(b.id, settlePayMode[b.id] || 'cash', settleSplit[b.id])
+      await settleBill(b.id, settlePayMode[b.id] || 'cash', settleSplit[b.id], b.total)
     }
   }
 
@@ -1047,9 +1068,9 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
                           )
                         })()}
 
-                                                {/* Paid+Pending input */}
+                        {/* Paid+Pending inputs */}
                         {(settlePayMode[b.id]||'cash') === 'paid_pending' && (() => {
-                          const spl     = settleSplit[b.id] || { cash:'' }
+                          const spl     = settleSplit[b.id] || { cash:'', upi:'' }
                           const paidNow = parseFloat(spl.cash) || 0
                           const pending = Math.max(0, Math.round(b.total) - paidNow)
                           return (
@@ -1058,7 +1079,7 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
                                 <span style={{ fontSize:'0.68rem', color:'var(--color-text3)', minWidth:48 }}>Paid now</span>
                                 <input type="number" min="0" max={Math.round(b.total)} placeholder="0"
                                   value={spl.cash}
-                                  onChange={e => setSettleSplit(p => ({...p, [b.id]: { cash: e.target.value }}))}
+                                  onChange={e => setSettleSplit(p => ({...p, [b.id]: { cash: e.target.value, upi:'' }}))}
                                   style={{ width:60, padding:'2px 5px', borderRadius:4, border:'1px solid var(--color-border)', background:'var(--color-bg2)', color:'var(--color-text)', fontSize:'0.78rem' }} />
                               </div>
                               <div style={{ fontSize:'0.68rem', color:'var(--color-amber)' }}>
@@ -1069,14 +1090,13 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
                         })()}
 
                         {/* Confirm / Cancel */}
-
                         <div style={{ display:'flex', gap:4 }}>
                           <button onClick={() => cancelSettle(b.id)}
                             style={{ padding:'3px 8px', borderRadius:5, fontSize:'0.7rem', border:'1px solid var(--color-border)', background:'transparent', color:'var(--color-text3)', cursor:'pointer' }}>
                             Cancel
                           </button>
                           <button
-                            onClick={() => settleBill(b.id, settlePayMode[b.id] || 'cash', settleSplit[b.id])}
+                            onClick={() => settleBill(b.id, settlePayMode[b.id] || 'cash', settleSplit[b.id], b.total)}
                             disabled={settling === b.id}
                             style={{ padding:'3px 10px', borderRadius:5, fontSize:'0.72rem', border:'1px solid var(--color-green)', background:'var(--color-green-glow)', color:'var(--color-green)', cursor:'pointer', fontWeight:700, opacity: settling===b.id ? 0.6 : 1 }}>
                             {settling === b.id ? '...' : '✓ Confirm'}
@@ -1294,7 +1314,7 @@ function TableCard({ table, onStart, onEditCustomer, onPause, onResume, onEnd, o
       {/* Show late indicator so owner knows why timer is higher */}
       {table.status !== 'available' && table.lateMinutes > 0 && (
         <div style={{ fontSize: '0.72rem', color: 'var(--color-amber)', marginBottom: '0.2rem', fontWeight: 500 }}>
-          ⏱ 
+          ⏱ includes +{table.lateMinutes}m late check-in
         </div>
       )}
 
