@@ -993,7 +993,7 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
                       <div style={{ display:'flex', flexDirection:'column', gap:'0.4rem', alignItems:'flex-end' }}>
                         {/* Payment mode buttons */}
                         <div style={{ display:'flex', gap:4 }}>
-                          {[['cash','Cash'],['upi','UPI'],['split','UPI+Cash']].map(([mode, label]) => (
+                          {[['cash','Cash'],['upi','UPI'],['split','UPI+Cash'],['paid_pending','Paid+Pending']].map(([mode, label]) => (
                             <button key={mode}
                               onClick={() => setSettlePayMode(p => ({...p, [b.id]: mode}))}
                               style={{
@@ -1047,7 +1047,29 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
                           )
                         })()}
 
+                                                {/* Paid+Pending input */}
+                        {(settlePayMode[b.id]||'cash') === 'paid_pending' && (() => {
+                          const spl     = settleSplit[b.id] || { cash:'' }
+                          const paidNow = parseFloat(spl.cash) || 0
+                          const pending = Math.max(0, Math.round(b.total) - paidNow)
+                          return (
+                            <div style={{ display:'flex', flexDirection:'column', gap:4, width:'100%' }}>
+                              <div style={{ display:'flex', gap:4, alignItems:'center' }}>
+                                <span style={{ fontSize:'0.68rem', color:'var(--color-text3)', minWidth:48 }}>Paid now</span>
+                                <input type="number" min="0" max={Math.round(b.total)} placeholder="0"
+                                  value={spl.cash}
+                                  onChange={e => setSettleSplit(p => ({...p, [b.id]: { cash: e.target.value }}))}
+                                  style={{ width:60, padding:'2px 5px', borderRadius:4, border:'1px solid var(--color-border)', background:'var(--color-bg2)', color:'var(--color-text)', fontSize:'0.78rem' }} />
+                              </div>
+                              <div style={{ fontSize:'0.68rem', color:'var(--color-amber)' }}>
+                                Pending: ₹{pending}
+                              </div>
+                            </div>
+                          )
+                        })()}
+
                         {/* Confirm / Cancel */}
+
                         <div style={{ display:'flex', gap:4 }}>
                           <button onClick={() => cancelSettle(b.id)}
                             style={{ padding:'3px 8px', borderRadius:5, fontSize:'0.7rem', border:'1px solid var(--color-border)', background:'transparent', color:'var(--color-text3)', cursor:'pointer' }}>
