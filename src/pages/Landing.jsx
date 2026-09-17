@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 
 // ---------- tiny helpers ----------
-const NAV_LINKS = ['Problem', 'Solution', 'Features', 'Why CueTrack', 'Stories', 'Contact']
+const NAV_LINKS = ['Problem', 'Solution', 'Features', 'Why CNC', 'Stories', 'Contact']
 
 function useInView(threshold = 0.15) {
   const ref = useRef(null)
