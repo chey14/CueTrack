@@ -699,11 +699,11 @@ function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, ownerPin, on
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem', padding: '0.55rem 0.7rem', background: 'rgba(255,255,255,0.03)', borderRadius: 7 }}>
             <div>
               <div style={{ fontSize: '0.68rem', color: 'var(--color-text3)', marginBottom: 2 }}>Check-in</div>
-              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-green)' }}>{fmtTime12(checkInTime)}</div>
+              <div style={{ fontSize: '2rem', fontWeight: 600, color: 'var(--color-green)' }}>{fmtTime12(checkInTime)}</div>
             </div>
             <div>
               <div style={{ fontSize: '0.68rem', color: 'var(--color-text3)', marginBottom: 2 }}>Check-out</div>
-              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-red)' }}>{fmtTime12(checkOutTime)}</div>
+              <div style={{ fontSize: '2rem', fontWeight: 600, color: 'var(--color-red)' }}>{fmtTime12(checkOutTime)}</div>
             </div>
           </div>
 
