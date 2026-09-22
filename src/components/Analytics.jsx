@@ -192,7 +192,7 @@ export default function Analytics() {
     return billList.map(b => {
       const checkIn  = b.checkInTime  ? new Date(b.checkInTime)  : null
       const checkOut = b.checkOutTime ? new Date(b.checkOutTime) : b.createdAt
-      const fmtT = (d) => d ? d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true}) : ''
+      const fmtT = (d) => d ? d.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:false}) : ''
       const fmtD = (d) => d ? d.toLocaleDateString('en-IN') : ''
       return [
         b.billNumber || '',
@@ -542,7 +542,7 @@ export default function Analytics() {
                   {dayBills.map(b => {
                     const checkIn  = b.checkInTime  ? new Date(b.checkInTime)  : null
                     const checkOut = b.checkOutTime ? new Date(b.checkOutTime) : b.createdAt
-                    const fmtT = (d) => d?.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true}) || '—'
+                    const fmtT = (d) => d?.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:false}) || '—'
                     const onSettlePending = (billId, pendingAmt) => {
                       if (window.confirm(`Mark ₹${Math.round(pendingAmt)} as collected for this bill?`)) {
                         settlePending(billId)

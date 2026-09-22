@@ -30,7 +30,7 @@ function sanitisePhone(raw) {
   return null  // invalid
 }
 function fmtTime12(d) {
-  return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true })
+  return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
 }
 
 // ── Canteen menu (shared across modals) ───────────────────────────
@@ -900,7 +900,7 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
 
   function fmtT(d) {
     if (!d) return '—'
-    return d.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true })
+    return d.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:false })
   }
 
   const payTag = {
