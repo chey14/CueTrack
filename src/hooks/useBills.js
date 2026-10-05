@@ -22,7 +22,8 @@ export function useBills() {
     // Order by createdAt descending = newest bills first
     const q = query(
       collection(db, 'clubs', uid, 'bills'),
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'desc'),
+      limit(200)
     )
 
     const unsub = onSnapshot(q, (snap) => {
