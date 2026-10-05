@@ -8,7 +8,7 @@
 //                canteenTotal, createdAt, customer
 
 import { useState, useEffect } from 'react'
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore'
+import { collection, query, orderBy,limit, onSnapshot } from 'firebase/firestore'
 import { db, auth } from '../firebase'
 
 export function useBills() {
