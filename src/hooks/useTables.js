@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import {
   collection, doc, onSnapshot, setDoc, addDoc,
-  serverTimestamp, runTransaction
+  serverTimestamp, runTransaction, getDoc   // ← add getDoc
 } from 'firebase/firestore'
 import { db, auth } from '../firebase'
 
@@ -100,8 +100,29 @@ export function useTables(settingsTables) {
   }
 
   async function addCanteenItems(tableId, currentCanteen, newItems) {
-    await updateTable(tableId, { canteen: [...currentCanteen, ...newItems] })
+  await updateTable(tableId, { canteen: [...currentCanteen, ...newItems] })
+
+  // Auto-deduct from inventory
+  const menuRef = doc(db, 'clubs', uid(), 'settings', 'canteenMenu')
+  const menuSnap = await getDoc(menuRef)
+  if (menuSnap.exists()) {
+    const menuItems = menuSnap.data().items || []
+    const updatedMenu = menuItems.map(menuItem => {
+      // Match by name — deduct quantity sold
+      const sold = newItems
+        .filter(i => i.name.startsWith(menuItem.name))
+        .reduce((sum, i) => {
+          // Extract quantity from name like "Water ×2" → 2
+          const match = i.name.match(/×(\d+)/)
+          return sum + (match ? parseInt(match[1]) : 1)
+        }, 0)
+      return sold > 0
+        ? { ...menuItem, qty: Math.max(0, menuItem.qty - sold) }
+        : menuItem
+    })
+    await setDoc(menuRef, { items: updatedMenu })
   }
+}
 
   async function removeCanteenItem(tableId, currentCanteen, index) {
     await updateTable(tableId, { canteen: currentCanteen.filter((_, i) => i !== index) })
