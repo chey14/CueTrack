@@ -1076,7 +1076,7 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
                             Cancel
                           </button>
                           <button
-                            onClick={() => settleBill(b.id, settlePayMode[b.id] || 'cash', settleSplit[b.id])}
+                            onClick={() => settleBill(b.id, settlePayMode[b.id] || 'cash', settleSplit[b.id],b.total)}
                             disabled={settling === b.id}
                             style={{ padding:'3px 10px', borderRadius:5, fontSize:'0.72rem', border:'1px solid var(--color-green)', background:'var(--color-green-glow)', color:'var(--color-green)', cursor:'pointer', fontWeight:700, opacity: settling===b.id ? 0.6 : 1 }}>
                             {settling === b.id ? '...' : '✓ Confirm'}
