@@ -196,34 +196,54 @@ export function useTables(settingsTables) {
 
   // ── Standalone canteen checkout (no table session) ─────────────
   async function saveCanteenBill(items, billData) {
-    if (!uid()) return
+  if (!uid()) return
 
-    const billNumber   = await getNextBillNumber()
-    const checkOutTime = new Date().toISOString()
+  const billNumber   = await getNextBillNumber()
+  const checkOutTime = new Date().toISOString()
 
-    await addDoc(billsCol(), {
-      billType:     'canteen',
-      billNumber,
-      tableName:    'Canteen',
-      tableId:      'canteen',
-      tableCharge:  0,
-      elapsed:      0,
-      canteen:      items,
-      canteenTotal: billData.canteenTotal,
-      discount:     billData.discount || 0,
-      total:        billData.total,
-      paymentMode:  billData.paymentMode,
-      cashAmount:   billData.cashAmount   || 0,
-      upiAmount:    billData.upiAmount    || 0,
-      pendingAmount:billData.pendingAmount || 0,
-      customer:     billData.customer || null,
-      checkInTime:  checkOutTime,
-      checkOutTime: checkOutTime,
-      createdAt:    serverTimestamp(),
+  await addDoc(billsCol(), {
+    billType:     'canteen',
+    billNumber,
+    tableName:    'Canteen',
+    tableId:      'canteen',
+    tableCharge:  0,
+    elapsed:      0,
+    canteen:      items,
+    canteenTotal: billData.canteenTotal,
+    discount:     billData.discount || 0,
+    total:        billData.total,
+    paymentMode:  billData.paymentMode,
+    cashAmount:   billData.cashAmount   || 0,
+    upiAmount:    billData.upiAmount    || 0,
+    pendingAmount:billData.pendingAmount || 0,
+    customer:     billData.customer || null,
+    checkInTime:  checkOutTime,
+    checkOutTime: checkOutTime,
+    createdAt:    serverTimestamp(),
+  })
+
+  
+  const menuRef = doc(db, 'clubs', uid(), 'settings', 'canteenMenu')
+  const menuSnap = await getDoc(menuRef)
+  if (menuSnap.exists()) {
+    const menuItems = menuSnap.data().items || []
+    const updatedMenu = menuItems.map(menuItem => {
+      const sold = items
+        .filter(i => i.name.startsWith(menuItem.name))
+        .reduce((sum, i) => {
+          const match = i.name.match(/×(\d+)/)
+          return sum + (match ? parseInt(match[1]) : 1)
+        }, 0)
+      return sold > 0
+        ? { ...menuItem, qty: Math.max(0, menuItem.qty - sold) }
+        : menuItem
     })
-
-    return billNumber
+    await setDoc(menuRef, { items: updatedMenu })
   }
+  
+
+  return billNumber
+}
 
   // ── Transfer session to another table ───────────────────────
   // Carries the BILLED AMOUNT from the old table as a fixed credit.
