@@ -800,7 +800,7 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
   const totalAmount  = tableBills.reduce((s,b) => s + b.total, 0)
   const totalPending = tableBills.reduce((s,b) => s + (b.pendingAmount||0), 0)
 
-  async function settleBill(billId, paymentMode, splitAmts) {
+  async function settleBill(billId, paymentMode, splitAmts,billTotal) {
     const uid = auth.currentUser?.uid
     if (!uid) return
     // Validate split amounts if UPI+Cash selected
@@ -823,6 +823,14 @@ function TableBillsModal({ table, bills, ownerPin, onClose }) {
       if (paymentMode === 'split' && splitAmts) {
         updates.cashAmount = parseFloat(splitAmts.cash) || 0
         updates.upiAmount  = parseFloat(splitAmts.upi)  || 0
+      }
+      if (paymentMode === 'paid_pending' && splitAmts) {
+        const paidNow = parseFloat(splitAmts.cash) || 0
+        const total   = billTotal || tableBills.find(b => b.id === billId)?.total || 0
+        const pending = Math.max(0, Math.round(total) - paidNow)
+        updates.cashAmount    = paidNow
+        updates.pendingAmount = pending
+        updates.settled       = true   // leaves badge, but Analytics shows Settle button
       }
       await updateDoc(doc(db, 'clubs', uid, 'bills', billId), updates)
     } catch(e) {
