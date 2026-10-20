@@ -1,7 +1,8 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo,useRef } from 'react'
 import { useBills } from '../hooks/useBills'
 import { auth } from '../firebase'
 import { useClubSettings } from '../hooks/useClubSettings'
+
 
 // ── Helpers ──────────────────────────────────────────────────────
 function inr(n) { return `₹${Number(n).toLocaleString('en-IN')}` }
@@ -32,6 +33,12 @@ export default function Analytics() {
   const { settings } = useClubSettings()
   const [historyFilter, setHistoryFilter] = useState('all')
   const [activeTab, setActiveTab] = useState('overview')
+    // Export PIN protection
+  const [exportPinShown,   setExportPinShown]   = useState(false)
+  const [exportPinVal,     setExportPinVal]      = useState('')
+  const [exportPinErr,     setExportPinErr]      = useState(false)
+  const [exportUnlocked,   setExportUnlocked]    = useState(false)
+  const [pendingExport,    setPendingExport]      = useState(null) // 'day'|'month'|'all'
 
   const analytics = useMemo(() => {
     if (!bills.length) return null
@@ -501,23 +508,52 @@ export default function Analytics() {
               ))}
             </div>
             <div style={{ display:'flex',gap:'0.4rem',flexWrap:'wrap' }}>
-              <button onClick={exportDayCSV} className="btn-ghost"
-                style={{ fontSize:'0.78rem',padding:'0.4rem 0.75rem',display:'flex',alignItems:'center',gap:'0.3rem' }}>
-                ⬇ Today
-              </button>
-              <button onClick={exportMonthCSV} className="btn-ghost"
-                style={{ fontSize:'0.78rem',padding:'0.4rem 0.75rem',display:'flex',alignItems:'center',gap:'0.3rem' }}>
-                ⬇ This month
-              </button>
-              <button onClick={exportCSV} className="btn-ghost"
-                style={{ fontSize:'0.78rem',padding:'0.4rem 0.75rem',display:'flex',alignItems:'center',gap:'0.3rem' }}>
-                ⬇ All bills
-              </button>
+                            {!exportPinShown ? (
+                <div style={{ display:'flex', gap:'0.4rem' }}>
+                  <button onClick={()=>{ setPendingExport('day');   setExportPinShown(true) }} className="btn-ghost" style={{ fontSize:'0.78rem',padding:'0.4rem 0.75rem' }}>⬇ Today</button>
+                  <button onClick={()=>{ setPendingExport('month'); setExportPinShown(true) }} className="btn-ghost" style={{ fontSize:'0.78rem',padding:'0.4rem 0.75rem' }}>⬇ This month</button>
+                  <button onClick={()=>{ setPendingExport('all');   setExportPinShown(true) }} className="btn-ghost" style={{ fontSize:'0.78rem',padding:'0.4rem 0.75rem' }}>⬇ All bills</button>
+                </div>
+              ) : (
+                <div style={{ display:'flex', gap:'0.4rem', alignItems:'center' }}>
+                  <input type="password" placeholder="Enter PIN" maxLength={8}
+                    value={exportPinVal}
+                    onChange={e => setExportPinVal(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        const correct = settings?.ownerPin || localStorage.getItem('ct_owner_pin') || '1234'
+                        if (exportPinVal === correct) {
+                          if (pendingExport === 'day')   exportDayCSV()
+                          if (pendingExport === 'month') exportMonthCSV()
+                          if (pendingExport === 'all')   exportCSV()
+                          setExportPinShown(false); setExportPinVal(''); setExportPinErr(false)
+                        } else { setExportPinErr(true); setExportPinVal('') }
+                      }
+                    }}
+                    style={{ width:110, padding:'0.35rem 0.6rem', borderRadius:6, border:`1px solid ${exportPinErr ? 'var(--color-red)' : 'var(--color-border)'}`, background:'var(--color-bg2)', color:'var(--color-text)', fontSize:'0.78rem' }}
+                    autoFocus
+                  />
+                  <button onClick={() => {
+                    const correct = settings?.ownerPin || localStorage.getItem('ct_owner_pin') || '1234'
+                    if (exportPinVal === correct) {
+                      if (pendingExport === 'day')   exportDayCSV()
+                      if (pendingExport === 'month') exportMonthCSV()
+                      if (pendingExport === 'all')   exportCSV()
+                      setExportPinShown(false); setExportPinVal(''); setExportPinErr(false)
+                    } else { setExportPinErr(true); setExportPinVal('') }
+                  }} className="btn-primary" style={{ padding:'0.35rem 0.75rem', fontSize:'0.78rem' }}>
+                    ✓
+                  </button>
+                  <button onClick={() => { setExportPinShown(false); setExportPinVal(''); setExportPinErr(false) }}
+                    style={{ background:'none', border:'none', color:'var(--color-text3)', cursor:'pointer', fontSize:'0.82rem' }}>✕</button>
+                  {exportPinErr && <span style={{ fontSize:'0.72rem', color:'var(--color-red)' }}>Wrong PIN</span>}
+                </div>
+              )}
             </div>
           </div>
 
           {/* Bills grouped by date */}
-          {sortedDateKeys.map(dk => {
+          {sortedDateKeys.filter(dk => dk === dateKey(new Date())).map(dk => {
             const dayBills = (byDate[dk] || []).filter(b => {
               if (historyFilter==='all') return true
               if (historyFilter==='pending_only') return b.paymentMode==='paid_pending' || b.paymentMode==='pending'
