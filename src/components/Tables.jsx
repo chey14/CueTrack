@@ -691,7 +691,7 @@ function BillModal({ table, upiId, upiQrBase64, upiQrUrl, clubName, ownerPin, on
               </div>
             </div>
             <div style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.2rem', color: 'var(--color-amber)' }}>
-              {formatTimerDisplay(table.elapsed)}
+              {formatTimerDisplay(billedSeconds)}
             </div>
           </div>
 
